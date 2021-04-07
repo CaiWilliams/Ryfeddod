@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 class Original:
 
-    def __init__(self,FilePath,Country):
+    def __init__(self, FilePath, Country):
         self.FilePath = FilePath
         self.Country = Country
         self.Files = os.listdir(FilePath)
@@ -37,11 +37,19 @@ class Original:
             self.Data['Settlement Date'] = self.Data['Settlement Date'] + Times
             self.Days = self.Data['Settlement Date']
             self.Data = self.Data.set_index(['Settlement Date'])
-            self.Data = self.Data.drop(['HDR','SP'], axis=1)
+            self.Data = self.Data.drop(['HDR', 'SP'], axis=1)
+        elif self.Country == 'UKSolar':
+            self.Technologies = 'Solar'
+            self.Data = self.Data.drop(['ggd_id', 'n_ggds', 'lcl_mw', 'ucl_mw', 'capacity_mwp', 'installedcapacity_mwp'], axis=1)
+            self.Data['Generation'] = self.Data['generation_mw']
+            self.Data = self.Data.drop('generation_mw', axis=1)
+            self.Data['datetime_gmt'] = [datetime.strptime(str(date), '%Y-%m-%dT%H:%M:%SZ') for date in self.Data['datetime_gmt']]
+            self.Data = self.Data.rename(columns={'datetime_gmt': 'Settlement Date'})
+            self.Data = self.Data.set_index('Settlement Date')
 
 class Technology(Original):
 
-    def __init__(self,OG,Tech):
+    def __init__(self, OG, Tech):
         super().__init__(OG.FilePath,OG.Country)
         self.Name = Tech
         if OG.Country == 'NZ':
@@ -60,17 +68,30 @@ class Technology(Original):
             self.HourlyTotal = DataNS.groupby(DataNS['Settlement Date']).agg({'Generation':'sum'})
             self.DailyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.date).agg({'Generation': 'sum'})
             self.MonthlyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.month).agg({'Generation': 'sum'})
+        elif OG.Country == 'UKSolar':
+            DataNS = self.Data.reset_index()
+            Data = self.Data['Generation']
+            self.Total = Data.sum(axis=0)
+            self.HourlyTotal = DataNS.groupby(DataNS['Settlement Date']).agg({'Generation': 'sum'})
+            self.DailyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.date).agg({'Generation': 'sum'})
+            self.MonthlyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.month).agg({'Generation': 'sum'})
+
     
-    def __rmul__(self,other):
+    def __rmul__(self, other):
         return self.Total * other
+
+    def SetCarbonIntensity(self, CO2):
+        self.CarbonIntensity = CO2
+        return
     
 
 class DispatchClass:
 
-    def __init__(self,*args):
+    def __init__(self, *args):
         self.Technologies = np.empty(0)
         for i in args:
-            self.Technologies = np.append(self.Technologies,i)
+            self.Technologies = np.append(self.Technologies, i)
+        #self.Technologies = args
         self.Total = 0
         self.HourlyTotal = args[0].HourlyTotal.copy()
         self.HourlyTotal['Generation'] = 0
@@ -110,12 +131,16 @@ class Dispatcher:
         return
 
 UK = Original('Data/UK', 'UK')
+UKSolar = Original('Data/UKSolar','UKSolar')
 
 NPSHyd = Technology(UK, 'NPSHyd')
+NPSHyd.SetCarbonIntensity(24)
+
 PS = Technology(UK, 'PS')
 CCGT = Technology(UK, 'CCGT')
 OCGT = Technology(UK, 'OCGT')
 Coal = Technology(UK, 'Coal')
+Coal.SetCarbonIntensity(820)
 Oil = Technology(UK, 'Oil')
 Nuclear = Technology(UK, 'Nuclear')
 Wind = Technology(UK, 'Wind')
@@ -129,23 +154,21 @@ INTNEM = Technology(UK, 'INTNEM')
 INTELEC = Technology(UK, 'INTELEC')
 INTIFA2 = Technology(UK, 'INTIFA2')
 INTNSL = Technology(UK, 'INTNSL')
+Solar = Technology(UKSolar, 'Solar')
+print(Solar.Total)
 
 
-DC1 = DispatchClass(NPSHyd)
-DC2 = DispatchClass(PS)
-DC3 = DispatchClass(CCGT)
-DC4 = DispatchClass(OCGT)
-DC5 = DispatchClass(Oil)
-DC6 = DispatchClass(Nuclear)
-DC62 = DispatchClass(Nuclear)
-DC7 = DispatchClass(Wind)
-DC8 = DispatchClass(Other)
-DC9 = DispatchClass(INTFR,INTIRL,INTNED,INTEW,INTNEM,INTELEC,INTIFA2,INTNSL)
-OldGen = DispatchClass(NPSHyd,PS,CCGT,OCGT,Oil,Nuclear,Wind,Other,INTFR,INTIRL,INTNED,INTEW,INTNEM,INTELEC,INTIFA2,INTNSL)
 
-Dispatched = Dispatcher(OldGen,DC1,DC2,DC3,DC4,DC5,DC6,DC7,DC8,DC9,DC62)
-Dispatched.Dispatch()
 
-#plt.stackplot(DC1.HourlyTotal.index,DC1.HourlyTotal['Generation'],DC2.HourlyTotal['Generation'],DC3.HourlyTotal['Generation'],DC4.HourlyTotal['Generation'],DC5.HourlyTotal['Generation'],DC6.HourlyTotal['Generation'],DC7.HourlyTotal['Generation'],DC8.HourlyTotal['Generation'],DC9.HourlyTotal['Generation'],labels=['DC1','DC2','DC3','DC4','DC5','DC6','DC7','DC8','DC9'])
+DC1 = DispatchClass(Nuclear, Biomass, Other)
+DC2 = DispatchClass(NPSHyd, Wind, Solar)
+DC3 = DispatchClass(PS)
+DC4 = DispatchClass(INTFR, INTIRL, INTNED, INTEW, INTNEM, INTELEC, INTIFA2, INTNSL, CCGT, OCGT)
+
+#OldGen = DispatchClass(NPSHyd,PS,CCGT,OCGT,Oil,Coal,Nuclear,Wind,Other,INTFR,INTIRL,INTNED,INTEW,INTNEM,INTELEC,INTIFA2,INTNSL)
+#Dispatched = Dispatcher(DC1,DC2,DC3,DC4)
+#Dispatched.Dispatch()
+
+plt.stackplot(DC1.HourlyTotal.index,DC1.HourlyTotal['Generation'],DC2.HourlyTotal['Generation'],DC3.HourlyTotal['Generation'],DC4.HourlyTotal['Generation'],labels=['DC1','DC2','DC3','DC4'])
 #plt.legend()
-#plt.show()
+plt.show()
