@@ -48,11 +48,20 @@ class Original:
             self.Data = self.Data.set_index('Settlement Date')
         elif self.Country == 'UK2':
             self.Data['Settlement Period'] = [timedelta(minutes=int(Period * 30)) for Period in self.Data['Settlement Period']]
-            self.Data['Settlement Date'] = pd.to_datetime(self.Data['Settlement Date'], format='%Y-%m-%d')
+            self.Data['Settlement Date'] = pd.to_datetime(self.Data['Settlement Date'], format='%d/%m/%Y')
             self.Data['Settlement Date'] = self.Data['Settlement Date'] + self.Data['Settlement Period']
             self.Data = self.Data.drop(columns='Settlement Period')
             self.Times = self.Data['Settlement Date']
             self.Data = self.Data.set_index('Settlement Date')
+        elif self.Country == 'Enhancment':
+            self.Data['Date'] = [datetime.strptime(str(date), '%d/%m/%Y %H:%M') for date in self.Data['Date']]
+            self.Data['Date'] = [date + timedelta(days=-1461) for date in self.Data['Date']]
+            self.Data2 = self.Data.copy()
+            self.Data2['Date'] = [date + timedelta(minutes=30) for date in self.Data['Date']]
+            self.Data = self.Data.append(self.Data2)
+            self.Data = self.Data.sort_values(by=['Date'])
+            self.Data = self.Data.set_index('Date')
+            #self.Data['Date'] = [for date in self.Data['Date']]
 
     def MatchTimes(self, MatchTo):
         self.Data = self.Data.loc[self.Data.index.isin(MatchTo.Data.index)]
@@ -104,10 +113,15 @@ class Technology:
         self.Capacity = Cap
         return
 
+    def SetScaler(self, Scaler):
+        self.Scaler = Scaler
+        return
+
     def Add(self, *args):
         for a in args:
             self.HourlyTotal = self.HourlyTotal + a.HourlyTotal
         return self
+
 
 class DispatchClass:
 
@@ -125,7 +139,7 @@ class DispatchClass:
         for i in args:
             self.Total = self.Total + i.Total
             self.HourlyTotal = self.HourlyTotal + i.HourlyTotal
-            self.Capacity = self.Capacity + i.Capacity
+            #self.Capacity = self.Capacity + i.Capacity
 
     def CarbonIntensity(self):
         self.Carbon = self.HourlyTotal
@@ -145,174 +159,444 @@ class Dispatcher:
         self.DC4 = DC4
         self.OldGen = OldGen
 
-    def Dispatch(self):
-        self.Net = -self.OldGen.HourlyTotal.to_numpy()
-        self.StorageCapacity = 4630
-        self.StoredEnergy = np.zeros(np.shape(self.Net))
+    def Dispatch2(self):
 
-        self.DC1.HourlyTotal = self.DC1.HourlyTotal['Generation'].to_numpy()
-        self.DC2.HourlyTotal = self.DC2.HourlyTotal['Generation'].to_numpy()
-        self.DC3.HourlyTotal = self.DC3.HourlyTotal['Generation'].to_numpy()
-        self.DC4.HourlyTotal = self.DC4.HourlyTotal['Generation'].to_numpy()
-        self.StoredEnergy = self.DC3.HourlyTotal
-        idx = 0
-        for Demand in self.Net:
+        self.Dates = self.OldGen.HourlyTotal.index.to_numpy()
+        self.Demand = np.ravel(self.OldGen.HourlyTotal.to_numpy())
+        self.Generation = 0
+        self.Carbon = 0
 
-        # DC1
-            self.Net[idx] = Demand + self.DC1.HourlyTotal[idx]
+        for Tech in self.DC1.Technologies:
+            TechGeneration = np.ravel(Tech.HourlyTotal.to_numpy())
+            TechGeneration = TechGeneration * Tech.Scaler
+            TechGeneration = np.minimum(TechGeneration, (self.Demand-self.Generation))
+            self.Generation = self.Generation + TechGeneration
+            self.Carbon = self.Carbon + (TechGeneration * Tech.CarbonIntensity)
+            setattr(self,Tech.Name, np.ravel(TechGeneration))
+            setattr(self, str(Tech.Name) + "Carbon", np.ravel((TechGeneration * Tech.CarbonIntensity)))
 
-            # Over Generation? Y
-            if self.Net[idx] > 0:
-                # Is storage full or have insufficient capacity for over generation? N
-                if (self.StorageCapacity - self.StoredEnergy[idx]) >= self.Net[idx]:
-                    self.StoredEnergy[idx] = self.StoredEnergy[idx] + self.Net[idx]
+        DC2Pre = 0#np.zeros(len(self.Demand))
+        DC2Pst = 0#np.zeros(len(self.Demand))
 
-                # Is storage full or have insufficient capacity for over generation? Y
-                else:
-                    print("Inflexible Generation Needs to be Curtailed")
-                    break
+        for Tech in self.DC2.Technologies:
+            TechGeneration = np.ravel(Tech.HourlyTotal.to_numpy())
+            DC2Pre = DC2Pre + TechGeneration
+            TechGeneration = TechGeneration * Tech.Scaler
+            TechGeneration = np.minimum(TechGeneration, (self.Demand-self.Generation))
+            self.Generation = self.Generation + TechGeneration
+            self.Carbon = self.Carbon + (TechGeneration * Tech.CarbonIntensity)
+            DC2Pst = DC2Pst + TechGeneration
+            setattr(self, Tech.Name, np.ravel(TechGeneration))
+            setattr(self, str(Tech.Name) + "Carbon", np.ravel((TechGeneration * Tech.CarbonIntensity)))
 
-            # Over Generation? N
-            elif self.Net[idx] == 0:
-                idx = idx + 1
-                continue
+        for Tech in self.DC3.Technologies:
+            TechGeneration = np.ravel(Tech.HourlyTotal.to_numpy())
+            TechGeneration = TechGeneration * Tech.Scaler
+            TechGeneration = np.minimum(TechGeneration,(self.Demand-self.Generation))
+            self.StorageDischarge = TechGeneration
+            self.Generation = self.Generation + TechGeneration
+            setattr(self, Tech.Name, np.ravel(TechGeneration))
+            setattr(self, str(Tech.Name) + "Carbon", np.ravel((TechGeneration * Tech.CarbonIntensity)))
 
-        # DC2
-            self.Net[idx] = self.Net[idx] + self.DC2.HourlyTotal[idx]
+        self.DC2Curtailed = DC2Pre - DC2Pst
+        self.StorageSoC = np.zeros(len(self.Demand))
+        StorageRTESQRT = 0.92
+        StorageCapacity = 0#4052
+        StoragePower = 500
 
-            # Over Generation? Y
-            if self.Net[idx] > 0:
-                # Is storage full or have insufficient capacity for over generation? N
-                if (self.StorageCapacity - self.StoredEnergy[idx]) >= self.Net[idx]:
-                    self.StoredEnergy[idx] = self.StoredEnergy[idx] + self.Net[idx]
-                    print("Curtail Flexible Low Carbon Generation")
-                # Is storage full or have insufficient capacity for over generation? Y
-                else:
-                    print("Curtail Flexible Low Carbon Generation")
-                    continue
+        for i in range(0, len(self.StorageSoC)):
+            self.StorageSoC[i] = np.minimum(np.abs(self.StorageSoC[i-1] + (self.DC2Curtailed[i] * StorageRTESQRT) - (self.StorageDischarge[i]/StorageRTESQRT)) , (StorageCapacity) )
+        self.StorageDischarge2 = self.StorageDischarge.copy()
 
-            # Over Generation? N
-            elif self.Net[idx] <= 0:
-                if self.Net[idx] == 0:
-                    idx = idx + 1
-                    continue
+        for i in range(0, len(self.StorageSoC)):
+            self.StorageDischarge2[i] = min((self.Demand[i] - self.Generation[i]), self.StorageSoC[i-1], StoragePower)
 
-        # DC3
-
-            # Energy storage empty? N
-            if self.StoredEnergy[idx] == 0:
-
-                self.Net[idx] = self.Net[idx] + self.DC4.HourlyTotal[idx]
-
-                if self.Net[idx] == 0:
-                    idx = idx + 1
-                    continue
-                else:
-                    print("Insufficient Plant to meet demand")
-                idx = idx + 1
-                continue
-            else:
-                # Discharge storage to minimum of: - unmet demand -storage rating -remaining power that can be delivered
-                if self.StoredEnergy[idx] >= np.abs(self.Net[idx]):
-                    self.StoredEnergy[idx] = self.StoredEnergy[idx] + self.Net[idx]
-                    self.Net[idx] = 0
-                elif self.StoredEnergy[idx] <= np.abs(self.Net[idx]):
-                    self.Net[idx] = self.Net[idx] + self.StoredEnergy[idx]
-                    self.StoredEnergy[idx] = 0
+        self.StorageDischarge3 = self.StorageDischarge2 + self.StorageDischarge
 
 
-            if self.Net[idx] == 0:
-                idx = idx + 1
-                continue
+        self.Carbon = self.Carbon + (self.StorageDischarge3 * DC3.PumpedStorage.CarbonIntensity)
+        #self.Generation = self.Generation + self.StorageDischarge3
 
-        #DC4
-            self.Net[idx] = self.Net[idx] + self.DC4.HourlyTotal[idx]
-            idx = idx + 1
 
+        for Tech in self.DC4.Technologies:
+            TechGeneration = np.ravel(Tech.HourlyTotal.to_numpy())
+            TechGeneration = TechGeneration * Tech.Scaler
+            TechGeneration = np.minimum(TechGeneration,(self.Demand-self.Generation))
+            self.Generation = self.Generation + TechGeneration
+            self.Carbon = self.Carbon + (TechGeneration * Tech.CarbonIntensity)
+            setattr(self, Tech.Name, np.ravel(TechGeneration))
+            setattr(self, str(Tech.Name) + "Carbon", np.ravel((TechGeneration * Tech.CarbonIntensity)))
+
+        if np.any((self.Demand-self.Generation)):
+            for Tech in self.DC4.Technologies:
+                TechGeneration = np.minimum(Tech.Capacity,self.Demand-self.Generation)
+                self.Generation = self.Generation + TechGeneration
+                self.Carbon = self.Carbon + (TechGeneration * Tech.CarbonIntensity)
+                self.__dict__[Tech.Name] = self.__dict__[Tech.Name] + TechGeneration
+                self.__dict__[str(Tech.Name)+"Carbon"] = self.__dict__[str(Tech.Name)+"Carbon"] + (TechGeneration * Tech.CarbonIntensity)
+
+
+        self.Oversupply = self.Generation - self.Demand
+        self.Error = np.where(self.Oversupply != 0, True, False)
+        self.Carbon = (self.Carbon / self.Generation/2) * 1*10**-4
+        self.Generation = self.Generation
+        #self.Synchronous = ((np.ravel(self.Nuclear) + np.ravel(self.Hydro) + np.ravel(self.StorageDischarge3) + np.ravel(self.Gas) + np.ravel(self.Coal)) / np.ravel(self.Generation)) * 100
         return
 
-UK = Original('Data/UK','UK')
-UKSolar = Original('Data/UKSolar','UKSolar')
-UK2 = Original('Data/UK2', 'UK2')
+#UK = Original('Data/2015/UK','UK')
+UKSolar = Original('Data/2015/UKSolar','UKSolar')
+UK2 = Original('Data/2015/UK2', 'UK2')
+EM = Original('Data/2015/Enhancment', 'Enhancment')
 
-UK = UK.MatchTimes(UK2)
 UKSolar = UKSolar.MatchTimes(UK2)
-UK = UK.MatchTimes(UKSolar)
 UK2 = UK2.MatchTimes(UKSolar)
+EM = EM.MatchTimes(UK2)
+EM = EM.MatchTimes(UKSolar)
+UKSolar = UKSolar.MatchTimes(EM)
+UK2 = UK2.MatchTimes(EM)
+EMa = np.ravel(EM.Data['Enhancment'].to_numpy())
 
-Biomass = Technology(UK2, 'Biomass')
-Biomass.SetCapacity(4237)
-Biomass.SetCarbonIntensity(230)
 
 Gas = Technology(UK2, 'Gas')
 Gas.SetCapacity(38274)
 Gas.SetCarbonIntensity(443)
+Gas.SetScaler(1)
 
 Coal = Technology(UK2, 'Coal')
 Coal.SetCapacity(6780)
 Coal.SetCarbonIntensity(960)
+Coal.SetScaler(1)
 
 PumpedStorage = Technology(UK2, 'PumpedStorage')
 PumpedStorage.SetCapacity(4052)
 PumpedStorage.SetCarbonIntensity(12)
+PumpedStorage.SetScaler(1)
 
 Hydro = Technology(UK2, 'Hydro')
 Hydro.SetCapacity(1882)
 Hydro.SetCarbonIntensity(10)
+Hydro.SetScaler(1)
 
 Nuclear = Technology(UK2, 'Nuclear')
 Nuclear.SetCapacity(8209)
-Nuclear.SetCarbonIntensity(12)
-
-SolarUtility = Technology(UK2, 'SolarUtility')
-SolarUtility.SetCapacity(13276)
-SolarUtility.SetCarbonIntensity(42)
+Nuclear.SetCarbonIntensity(13)
+Nuclear.SetScaler(1)
 
 WindOffshore = Technology(UK2, 'WindOffshore')
 WindOffshore.SetCapacity(10365)
 WindOffshore.SetCarbonIntensity(9)
+WindOffshore.SetScaler(1)
 
 WindOnshore = Technology(UK2, 'WindOnshore')
 WindOnshore.SetCapacity(12835)
 WindOnshore.SetCarbonIntensity(9)
+WindOnshore.SetScaler(1)
 
 Solar = Technology(UKSolar, 'Solar')
 Solar.SetCapacity(13080)
 Solar.SetCarbonIntensity(42)
+Solar.SetScaler(1)
 
-Interconect = Technology(UK, 'INTFR')
+SolarDSSC = Technology(UKSolar, 'Solar')
+SolarDSSC.Name = 'SolarDSSC'
+SolarDSSC.SetScaler(0 * EMa)
+SolarDSSC.SetCarbonIntensity(42)
 
-INTIRL = Technology(UK, 'INTIRL')
-INTNED = Technology(UK, 'INTNED')
-INTEW = Technology(UK, 'INTEW')
-INTNEM = Technology(UK, 'INTNEM')
-INTELEC = Technology(UK, 'INTELEC')
-INTIFA2 = Technology(UK, 'INTIFA2')
-INTNSL = Technology(UK, 'INTNSL')
+SolarF = Technology(UKSolar, 'Solar')
+SolarF.SetCapacity(13080)
+SolarF.SetCarbonIntensity(42)
+SolarF.SetScaler(1)
 
-Interconect = Interconect.Add(INTIRL,INTNED,INTEW,INTNEM,INTELEC,INTIFA2,INTNSL)
-Interconect.SetCarbonIntensity(42)
-Interconect.SetCapacity(8209)
+SolarUtility = Technology(UK2, 'SolarUtility')
+SolarUtility.SetCapacity(13276)
+SolarUtility.SetCarbonIntensity(42)
+SolarUtility.SetScaler(1)
 
+SolarUtilityF = Technology(UK2, 'SolarUtility')
+SolarUtilityF.SetCapacity(13276)
+SolarUtilityF.SetCarbonIntensity(42)
+SolarUtilityF.SetScaler(1)
 
+SolarUtilityDSSC = Technology(UK2, 'SolarUtility')
+SolarUtilityDSSC.Name = 'SolarUtilityDSSC'
+SolarUtilityDSSC.SetScaler(0 * EMa)
+SolarUtilityDSSC.SetCarbonIntensity(42)
 
-
-DC1 = DispatchClass('DC1', Nuclear, Solar, Biomass)
-DC2 = DispatchClass('DC2', Hydro, SolarUtility, WindOffshore, WindOnshore)
+DC1 = DispatchClass('DC1', Nuclear, Solar, SolarDSSC)
+DC2 = DispatchClass('DC2', Hydro, WindOffshore, WindOnshore, SolarUtility, SolarUtilityDSSC)
 DC3 = DispatchClass('DC3', PumpedStorage)
-DC4 = DispatchClass('DC4', Coal, Gas, Interconect)
-
-Total = DispatchClass('Total', Nuclear, Solar, Biomass, Hydro, SolarUtility, WindOffshore, WindOnshore, PumpedStorage, Coal, Gas, Interconect)
-#Total = DispatchClass('Total', Nuclear, Solar, Biomass)
-
+DC4 = DispatchClass('DC4', Gas, Coal)
+Total = DispatchClass('Total', Nuclear, SolarF, Hydro, SolarUtilityF, WindOffshore, WindOnshore, PumpedStorage, Gas, Coal)
 Dispatched = Dispatcher(Total, DC1, DC2, DC3, DC4)
-Dispatched.Dispatch()
 
-plt.plot(Dispatched.Net )
-plt.show()
+Devices = ['Data/2015/Bangor','Data/2015/NC','Data/2015/PolySi']
+
+def Sweep(Min, Max, Steps,Devices):
+
+    DSSC = np.linspace(Min,Max,Steps)
+    #DSSC =np.zeros(Steps)
+    NDSSC = np.linspace(1,0,Steps)
+    Results = np.zeros(len(DSSC))
+    NuclearU = np.zeros(len(DSSC))
+    SolarU = np.zeros(len(DSSC))
+    SolarDSSCU = np.zeros(len(DSSC))
+    HydroU = np.zeros(len(DSSC))
+    SolarUtilityU = np.zeros(len(DSSC))
+    SolarUtilityDSSCU = np.zeros(len(DSSC))
+    WindOffshoreU = np.zeros(len(DSSC))
+    WindOnshoreU = np.zeros(len(DSSC))
+    PumpedStorageU = np.zeros(len(DSSC))
+    StorageU = np.zeros(len(DSSC))
+    CoalU = np.zeros(len(DSSC))
+    GasU = np.zeros(len(DSSC))
+    TotalU = np.zeros(len(DSSC))
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.tab10.colors)
+    for Device in Devices:
+        UKSolar = Original('Data/2015/UKSolar', 'UKSolar')
+        UK2 = Original('Data/2015/UK2', 'UK2')
+        EM = Original(Device, 'Enhancment')
+        UKSolar = UKSolar.MatchTimes(UK2)
+        UK2 = UK2.MatchTimes(UKSolar)
+        EM = EM.MatchTimes(UK2)
+        EM = EM.MatchTimes(UKSolar)
+        UKSolar = UKSolar.MatchTimes(EM)
+        UK2 = UK2.MatchTimes(EM)
+        EMa = np.ravel(EM.Data['Enhancment'].to_numpy())
+        for idx,Scale in enumerate(DSSC):
+
+            Solar.SetScaler(NDSSC[idx])
+            SolarUtility.SetScaler(NDSSC[idx])
+
+            SolarDSSC.SetScaler(Scale * EMa)
+            SolarUtilityDSSC.SetScaler(Scale * EMa)
+
+            Dispatched.Dispatch2()
+
+            Results[idx] = np.cumsum(Dispatched.Carbon[~np.isnan(Dispatched.Carbon)])[-1]
+
+            NuclearU[idx] = np.cumsum(Dispatched.Nuclear)[-1]/1000000/2
+            SolarU[idx] = np.cumsum(Dispatched.Solar)[-1]/1000000/2
+            SolarDSSCU[idx] = np.cumsum(Dispatched.SolarDSSC)[-1]/1000000/2
+            HydroU[idx] = np.cumsum(Dispatched.Hydro)[-1]/1000000/2
+            SolarUtilityU[idx] = np.cumsum(Dispatched.SolarUtility)[-1]/1000000/2
+            SolarUtilityDSSCU[idx] = np.cumsum(Dispatched.SolarUtilityDSSC)[-1]/1000000/2
+            WindOffshoreU[idx] = np.cumsum(Dispatched.WindOffshore)[-1]/1000000/2
+            WindOnshoreU[idx] = np.cumsum(Dispatched.WindOnshore)[-1]/1000000/2
+            PumpedStorageU[idx] = np.cumsum(Dispatched.PumpedStorage)[-1]/1000000/2
+            StorageU[idx] = np.cumsum(Dispatched.StorageDischarge3)[-1]/1000000/2
+            CoalU[idx] = np.cumsum(Dispatched.Coal)[-1]/1000000/2
+            GasU[idx] = np.cumsum(Dispatched.Gas)[-1]/1000000/2
+            TotalU[idx] = np.cumsum(Dispatched.Generation)[-1]/1000000/2
+
+    #plt.plot(DSSC,NuclearU)
+    #plt.plot(DSSC,SolarU)
+    #plt.plot(DSSC,SolarDSSCU)
+    #plt.plot(DSSC,HydroU)
+    #plt.plot(DSSC,SolarUtilityU)
+    #plt.plot(DSSC,SolarUtilityDSSCU)
+    #plt.plot(DSSC,WindOffshoreU)
+    #plt.plot(DSSC,WindOnshoreU)
+    #plt.plot(DSSC,PumpedStorageU)
+    #plt.plot(DSSC,CoalU)
+    #plt.plot(DSSC,GasU)
+    #plt.legend(labels=['Nuclear', 'Solar', 'SolarDSSC', 'Hydro', 'SolarUtility', 'SolarUtilityDSSC', 'WindOffshore','WindOnshore', 'PumpedStorage', 'Coal', 'Gas'])
+    #plt.twinx()
+    #plt.plot(DSSC,TotalU)
+
+        #plt.stackplot(DSSC*100,NuclearU,SolarU,SolarDSSCU,HydroU,SolarUtilityU,SolarUtilityDSSCU,WindOffshoreU,WindOnshoreU,PumpedStorageU,CoalU,GasU,labels=['Nuclear','Solar','SolarDSSC','Hydro','SolarUtility','SolarUtilityDSSC','WindOffshore','WindOnshore','PumpedStorage','Coal','Gas'])
+        #plt.plot(DSSC,TotalU)
+        plt.plot(DSSC*100,(Results/Results[0])*100)
+    print("Nuclear: " + str(NuclearU[-1]/TotalU[-1]))
+    print("Solar: "+ str(SolarU[-1]/TotalU[-1]))
+    print("Solar DSSC: " + str(SolarDSSCU[-1]/TotalU[-1]))
+    print("Hydro: " + str(HydroU[-1]/TotalU[-1]))
+    print("Solar Utility: " + str(SolarUtilityU[-1]/TotalU[-1]))
+    print("Solar Untility DSSC: " + str(SolarUtilityDSSCU[-1]/TotalU[-1]))
+    print("Wind Off Shore: " + str(WindOffshoreU[-1]/TotalU[-1]))
+    print("Wind On Shore: " + str(WindOnshoreU[-1]/TotalU[-1]))
+    print("Pumped Storage: " + str(PumpedStorageU[-1]/TotalU[-1]))
+    print("Storage: " + str(StorageU[-1] / TotalU[-1]))
+    print("Coal: " + str(CoalU[-1]/TotalU[-1]))
+    print("Gas: " + str(GasU[-1]/TotalU[-1]))
+    plt.xlabel('Proportion of New Technology in Grid')
+    plt.ylabel('Relative Carbon Equivalent Emissions (%)')
+    #plt.legend()
+    plt.show()
+    return
+
+def MeanMonths(Scale):
+    UKSolar = Original('Data/2015/UKSolar', 'UKSolar')
+    UK2 = Original('Data/2015/UK2', 'UK2')
+    EM = Original('Data/2015/Bangor', 'Enhancment')
+    UKSolar = UKSolar.MatchTimes(UK2)
+    UK2 = UK2.MatchTimes(UKSolar)
+    EM = EM.MatchTimes(UK2)
+    EM = EM.MatchTimes(UKSolar)
+    UKSolar = UKSolar.MatchTimes(EM)
+    UK2 = UK2.MatchTimes(EM)
+    EMa = np.ravel(EM.Data['Enhancment'].to_numpy())
 
 
-#plt.stackplot(Total.HourlyTotal.index, Total.Biomass.HourlyTotal['Generation'], Total.Nuclear.HourlyTotal['Generation'], Total.WindOffshore.HourlyTotal['Generation'], Total.WindOnshore.HourlyTotal['Generation'], Total.SolarUtility.HourlyTotal['Generation'], Total.Solar.HourlyTotal['Generation'], Total.Hydro.HourlyTotal['Generation'], Total.PumpedStorage.HourlyTotal['Generation'], Total.Gas.HourlyTotal['Generation'], Total.Coal.HourlyTotal['Generation'], Total.INTFR.HourlyTotal['Generation'], labels=['Biomass','Nuclear','Wind OffShore','Wind OnShore','Solar Utility', 'Solar Home', 'Hydo', 'Pumped Storage', 'Gas', 'Coal', 'Interconect'])
-#plt.stackplot(DC1.HourlyTotal.index,DC1.HourlyTotal['Generation'],DC2.HourlyTotal['Generation'],DC3.HourlyTotal['Generation'],DC4.HourlyTotal['Generation'],labels=['DC1','DC2','DC3','DC4'])
-#plt.legend()
+    Solar.SetScaler(1-Scale)
+    SolarUtility.SetScaler(1-Scale)
+
+    SolarDSSC.SetScaler(Scale * EMa)
+    SolarUtilityDSSC.SetScaler(Scale * EMa)
+
+    Dispatched.Dispatch2()
+    Dt = pd.DataFrame()
+    Dt['Dates'] = Dispatched.Dates
+    Dt['Nuclear'] = Dispatched.Nuclear
+    Dt['Solar'] = Dispatched.Solar
+    Dt['SolarDSSC'] = Dispatched.SolarDSSC
+    Dt['Hydro'] = Dispatched.Hydro
+    Dt['SolarUtility'] = Dispatched.SolarUtility
+    Dt['SolarUtilityDSSC'] = Dispatched.SolarUtilityDSSC
+    Dt['WindOffShore'] = Dispatched.WindOffshore
+    Dt['WindOnShore'] = Dispatched.WindOnshore
+    Dt['PumpedStorage'] = Dispatched.PumpedStorage
+    Dt['Coal'] = Dispatched.Coal
+    Dt['Gas'] = Dispatched.Gas
+
+    NuclearG = np.zeros(12)
+    SolarG = np.zeros(12)
+    SolarDSSCG = np.zeros(12)
+    HydroG = np.zeros(12)
+    SolarUtilityG = np.zeros(12)
+    SolarUtilityDSSCG = np.zeros(12)
+    WindOffshoreG = np.zeros(12)
+    WindOnshoreG = np.zeros(12)
+    PumpedStorageG = np.zeros(12)
+    CoalG = np.zeros(12)
+    GasG = np.zeros(12)
+    Months = np.arange(1,13,1)
+    for idx,Month in enumerate(Months):
+        NuclearG[idx] = Dt[Dt['Dates'].dt.month == Month]['Nuclear'].mean()
+        SolarG[idx] = Dt[Dt['Dates'].dt.month == Month]['Solar'].mean()
+        SolarDSSCG[idx] = Dt[Dt['Dates'].dt.month == Month]['SolarDSSC'].mean()
+        HydroG[idx] = Dt[Dt['Dates'].dt.month == Month]['Hydro'].mean()
+        SolarUtilityG[idx] = Dt[Dt['Dates'].dt.month == Month]['SolarUtility'].mean()
+        SolarUtilityDSSCG[idx] = Dt[Dt['Dates'].dt.month == Month]['SolarUtilityDSSC'].mean()
+        WindOffshoreG[idx] = Dt[Dt['Dates'].dt.month == Month]['WindOffShore'].mean()
+        WindOnshoreG[idx] = Dt[Dt['Dates'].dt.month == Month]['WindOnShore'].mean()
+        PumpedStorageG[idx] = Dt[Dt['Dates'].dt.month == Month]['PumpedStorage'].mean()
+        CoalG[idx] = Dt[Dt['Dates'].dt.month == Month]['Coal'].mean()
+        GasG[idx] = Dt[Dt['Dates'].dt.month == Month]['Gas'].mean()
+
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.tab20.colors)
+    plt.stackplot(Months, NuclearG,SolarG,SolarDSSCG,HydroG,SolarUtilityG,SolarUtilityDSSCG,WindOffshoreG,WindOnshoreG,PumpedStorageG,CoalG,GasG)
+    plt.show()
+    return
+
+def MeanDay(Scale,Month):
+    UKSolar = Original('Data/2015/UKSolar', 'UKSolar')
+    UK2 = Original('Data/2015/UK2', 'UK2')
+    EM = Original('Data/2015/Bangor', 'Enhancment')
+    UKSolar = UKSolar.MatchTimes(UK2)
+    UK2 = UK2.MatchTimes(UKSolar)
+    EM = EM.MatchTimes(UK2)
+    EM = EM.MatchTimes(UKSolar)
+    UKSolar = UKSolar.MatchTimes(EM)
+    UK2 = UK2.MatchTimes(EM)
+    EMa = np.ravel(EM.Data['Enhancment'].to_numpy())
+
+    Solar.SetScaler(1 - Scale)
+    SolarUtility.SetScaler(1 - Scale)
+
+    SolarDSSC.SetScaler(Scale * EMa)
+    SolarUtilityDSSC.SetScaler(Scale * EMa)
+
+    Dispatched.Dispatch2()
+    Dt = pd.DataFrame()
+    Dt['Dates'] = Dispatched.Dates
+    Dt['Nuclear'] = Dispatched.NuclearCarbon
+    Dt['Solar'] = Dispatched.SolarCarbon
+    Dt['SolarDSSC'] = Dispatched.SolarDSSCCarbon
+    Dt['Hydro'] = Dispatched.HydroCarbon
+    Dt['SolarUtility'] = Dispatched.SolarUtilityCarbon
+    Dt['SolarUtilityDSSC'] = Dispatched.SolarUtilityDSSCCarbon
+    Dt['WindOffShore'] = Dispatched.WindOffshoreCarbon
+    Dt['WindOnShore'] = Dispatched.WindOnshoreCarbon
+    Dt['PumpedStorage'] = Dispatched.PumpedStorageCarbon
+    Dt['Coal'] = Dispatched.CoalCarbon
+    Dt['Gas'] = Dispatched.GasCarbon
+
+    NuclearG = np.zeros(24)
+    SolarG = np.zeros(24)
+    SolarDSSCG = np.zeros(24)
+    HydroG = np.zeros(24)
+    SolarUtilityG = np.zeros(24)
+    SolarUtilityDSSCG = np.zeros(24)
+    WindOffshoreG = np.zeros(24)
+    WindOnshoreG = np.zeros(24)
+    PumpedStorageG = np.zeros(24)
+    CoalG = np.zeros(24)
+    GasG = np.zeros(24)
+    Hours = np.arange(0, 24, 1)
+
+    Dt = Dt[Dt['Dates'].dt.month == Month]
+    for idx,Hour in enumerate(Hours):
+        NuclearG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['Nuclear'].mean()
+        SolarG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['Solar'].mean()
+        SolarDSSCG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['SolarDSSC'].mean()
+        HydroG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['Hydro'].mean()
+        SolarUtilityG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['SolarUtility'].mean()
+        SolarUtilityDSSCG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['SolarUtilityDSSC'].mean()
+        WindOffshoreG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['WindOffShore'].mean()
+        WindOnshoreG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['WindOnShore'].mean()
+        PumpedStorageG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['PumpedStorage'].mean()
+        CoalG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['Coal'].mean()
+        GasG[idx] = Dt[Dt['Dates'].dt.hour == Hour]['Gas'].mean()
+    plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.tab20.colors)
+    plt.stackplot(Hours, NuclearG, SolarG, SolarDSSCG, HydroG, SolarUtilityG, SolarUtilityDSSCG, WindOffshoreG,WindOnshoreG, PumpedStorageG, CoalG, GasG)
+    plt.xlabel("Hour of the Day")
+    plt.ylabel("Mean Power Generation (MW)")
+    plt.show()
+    return
+#Sweep(0,1,10,Devices)
+#MeanMonths(0.5)
+MeanDay(1,7)
+
+#plt.hist(I,bins=100)
+#plt.ylabel('Frequency')
+#plt.xlabel('Irradiance (W/$m^2$)')
+#plt.twinx()
+#plt.scatter(EM.Data['Irradiance'],EM.Data['Enhancment']*EM.Data['Irradiance'],c='orange')
+#plt.ylabel('Enhancment')
+#plt.scatter(EM.Data['Irradiance'], SD*SolarDSSC.Scaler, label='DSSC')
+#plt.scatter(EM.Data['Irradiance'], SD*Solar.Scaler, label='Installed PV')
+#plt.twinx()
+#plt.scatter(EM.Data['Irradiance'], SolarDSSC.Scaler*np.ones(len(EM.Data['Irradiance'])), color="tab:orange")
+#plt.scatter(EM.Data['Irradiance'], S * SolarDSSC.Scaler, label='DSSC')
+
+
+#print(Dispatched.Carbon)
+#plt.plot(Dispatched.Generation/1000)
+#print(np.cumsum(Dispatched.Carbon[~np.isnan(Dispatched.Carbon)])[-1])
+#print("Nuclear: " + str(np.cumsum(Dispatched.Nuclear)[-1]/1000000/2))
+#print("Solar: " + str(np.cumsum(Dispatched.Solar)[-1]/1000000/2))
+#print("SolarDSSC: " + str(np.cumsum(Dispatched.SolarDSSC)[-1]/1000000/2))
+#print("Hydro: " + str(np.cumsum(Dispatched.Hydro)[-1]/1000000))
+#print("SolarUtility: " + str(np.cumsum(Dispatched.SolarUtility)[-1]/1000000/2))
+#print("SolarUtilityDSSC: " + str(np.cumsum(Dispatched.SolarUtilityDSSC)[-1]/1000000/2))
+#print("WindOffshore: " + str(np.cumsum(Dispatched.WindOffshore)[-1]/1000000/2))
+#print("WindOnshore: " + str(np.cumsum(Dispatched.WindOnshore)[-1]/1000000/2))
+#print("PumpedStorage: " + str(np.cumsum(Dispatched.PumpedStorage)[-1]/1000000/2))
+#print("Coal: " + str(np.cumsum(Dispatched.Coal)[-1]/1000000/2))
+#print("Gas: " + str(np.cumsum(Dispatched.Gas)[-1]/1000000/2))
+#print("Total: " + str(np.cumsum(Dispatched.Generation)[-1]/1000000/2))
+#print("Carbon: " + str(np.cumsum(Dispatched.Carbon[~np.isnan(Dispatched.Carbon)])[-1]))
+#print(Dispatched.Error)
+#plt.plot(Dispatched.Dates,Dispatched.Demand)
+#plt.plot(Dispatched.Dates,Dispatched.Generation-Dispatched.Demand)
+#plt.plot(Dispatched.Dates,Dispatched.Demand2)
+#plt.twinx()
+#plt.plot(Dispatched.Dates,Dispatched.Demand,color="tab:green")
+#plt.plot(Dispatched.Dates,Dispatched.SolarUtilityDSSC + Dispatched.SolarDSSC,color="tab:green")
 #plt.show()
+
+EM.Data = EM.Data.replace(0,np.nan)
+EM.Data = EM.Data.dropna(how='all')
+W = np.arange(100,1000,100)
+plt.hist(EM.Data['Irradiance'],bins=500,weights=EM.Data['Irradiance'])
+plt.show()
