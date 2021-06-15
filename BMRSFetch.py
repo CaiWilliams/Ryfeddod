@@ -5,8 +5,8 @@ import io
 
 Key = 'zz6sqbg3mg0ybyc'
 APIRequest = 'https://api.bmreports.com/BMRS/B1620/<V2>?APIKey=<zz6sqbg3mg0ybyc>&SettlementDate=<SettlementDate>&Period=<Period>&ServiceType=<xml/csv'
-Year = 2015
-NumDays = (datetime(Year, 12, 31) - datetime(Year, 1, 1)).days
+Year = 2019
+NumDays = (datetime(Year, 12, 31) - datetime(Year, 12, 1)).days
 Days = [datetime(Year, 1, 1) + timedelta(days=1 * Day) for Day in range(0, NumDays+1)]
 DaysStr = [Day.strftime('%Y-%m-%d') for Day in Days]
 AllAPIRequests = ['https://api.bmreports.com/BMRS/B1620/V1?APIKey=zz6sqbg3mg0ybyc&SettlementDate='+SettlementDate+'&Period=*&ServiceType=csv' for SettlementDate in DaysStr]
