@@ -14,69 +14,6 @@ from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import copy
 
-class Original:
-
-    def __init__(self, FilePath, Country):
-        self.FilePath = FilePath
-        self.Country = Country
-        self.Files = os.listdir(FilePath)
-        self.Days = np.zeros(0)
-        self.Technologies = np.zeros(0)
-        self.Data = pd.DataFrame()
-        for Files in self.Files:
-                File = pd.read_csv(FilePath + '//' + Files)
-                self.Data = self.Data.append(File,ignore_index=True)
-        if self.Country == 'NZ':
-            self.TradingPeriods = np.arange(1,51,1)
-            self.TradingPeriods = np.asarray([timedelta(minutes=int(30*TP)) for TP in self.TradingPeriods])
-            self.Technologies = np.append(self.Technologies,pd.unique(File['Fuel_Code']))
-            self.Data['Trading_date'] = [datetime.strptime(date, '%Y-%m-%d') for date in self.Data['Trading_date']]
-            self.Data = self.Data.melt(['Trading_date','Site_Code','POC_Code','Nwk_Code','Gen_Code','Fuel_Code','Tech_Code'],var_name='Hour',value_name='Generation').dropna()
-            self.Times = pd.Series([timedelta(minutes= int(30 * int(hour[2:]))) for hour in self.Data['Hour']])
-            self.Data['Trading_date'] = self.Data['Trading_date'] + self.Times
-            self.Data = self.Data.drop('Hour',axis=1).dropna()
-            self.Days = self.Data['Trading_date']
-            self.Data = self.Data.set_index(['Trading_date'])
-        elif self.Country == 'UK':
-            self.TradingPeriods = np.arange(1, 51, 1)
-            self.TradingPeriods = np.asarray([timedelta(minutes=int(30 * (TP))) for TP in self.TradingPeriods])
-            self.Technologies = np.append(self.Technologies, pd.unique(File.columns[4:]))
-            self.Data['Settlement Date'] = [datetime.strptime(str(date), '%Y%m%d') for date in self.Data['Settlement Date']]
-            self.Times = pd.Series([timedelta(minutes=int(30 * int(hour))) for hour in self.Data['SP']])
-            self.Data['Settlement Date'] = self.Data['Settlement Date'] + self.Times
-            self.Days = self.Data['Settlement Date']
-            self.Data = self.Data.set_index(['Settlement Date'])
-            self.Data = self.Data.drop(['HDR', 'SP'], axis=1)
-        elif self.Country == 'UKSolar':
-            self.Technologies = 'Solar'
-            self.Data = self.Data.drop(['ggd_id', 'n_ggds', 'lcl_mw', 'ucl_mw', 'capacity_mwp', 'installedcapacity_mwp'], axis=1)
-            self.Data['Generation'] = self.Data['generation_mw']
-            self.Data = self.Data.drop('generation_mw', axis=1)
-            self.Data['datetime_gmt'] = [datetime.strptime(str(date), '%Y-%m-%dT%H:%M:%SZ') for date in self.Data['datetime_gmt']]
-            self.Data = self.Data.rename(columns={'datetime_gmt': 'Settlement Date'})
-            self.Times = self.Data['Settlement Date']
-            self.Data = self.Data.set_index('Settlement Date')
-        elif self.Country == 'UK2':
-            self.Data['Settlement Period'] = [timedelta(minutes=int(Period * 30)) for Period in self.Data['Settlement Period']]
-            self.Data['Settlement Date'] = pd.to_datetime(self.Data['Settlement Date'], format='%d/%m/%Y')
-            self.Data['Settlement Date'] = self.Data['Settlement Date'] + self.Data['Settlement Period']
-            self.Data = self.Data.drop(columns='Settlement Period')
-            self.Times = self.Data['Settlement Date']
-            self.Data = self.Data.set_index('Settlement Date')
-        elif self.Country == 'Enhancment':
-            self.Data['Date'] = [datetime.strptime(str(date), '%d/%m/%Y %H:%M') for date in self.Data['Date']]
-            self.Data['Date'] = [date + timedelta(days=-1461) for date in self.Data['Date']]
-            self.Data2 = self.Data.copy()
-            self.Data2['Date'] = [date + timedelta(minutes=30) for date in self.Data['Date']]
-            self.Data = self.Data.append(self.Data2)
-            self.Data = self.Data.sort_values(by=['Date'])
-            self.Data = self.Data.set_index('Date')
-            #self.Data['Date'] = [for date in self.Data['Date']]
-
-    def MatchTimes(self, MatchTo):
-        self.Data = self.Data.loc[self.Data.index.isin(MatchTo.Data.index)]
-        return self
-
 class Grid:
 
     def __init__(self,MixDir):
@@ -184,18 +121,20 @@ class Grid:
 
         PVGISData = pd.concat([PVGISData, HalfHours])
         PVGISData = PVGISData.sort_values(by=['time'])
+        PVGISData['time'] = [t.replace(year=self.StartDate.year) for t in PVGISData['time']]
         PVGISData = PVGISData.set_index(['time'])
         PVGISData.index = PVGISData.index.rename('Settlement Date')
 
         IndexValues = [Asset['Generation'].index.values for Asset in self.Mix['Technologies']]
         CommonIndex = list(set.intersection(*map(set, IndexValues)))
         PVGISData = PVGISData.loc[PVGISData.index.isin(CommonIndex)]
-
+        self.PVGISData = PVGISData
         Enhancment = pd.read_csv(EnhancmentDir)
         f = interp1d(Enhancment['Irradiance'].to_numpy(), Enhancment['Enhanced'].to_numpy(),kind='slinear', fill_value="extrapolate")
-        DynamScale = f(PVGISData['G(i)'])
-
-        return DynamScale
+        self.DynamScale = f(PVGISData['G(i)'])
+        self.DynamScalepd = PVGISData
+        self.DynamScalepd['G(i)'] = self.DynamScale
+        return self
 
     def DynamicScaleingPVGIS(self, Tech, DynamScale, BaseScale):
 
@@ -347,178 +286,13 @@ class Dispatch:
         self.Oversuply = self.Generation - self.Demand
         self.Error = np.where(self.Oversuply != 0, True, False)
 
-class Technology:
-
-    def __init__(self, OG, Tech):
-        self.OG = OG
-        self.Data = OG.Data
-        self.Name = Tech
-        if OG.Country == 'NZ':
-            Data = self.Data[self.Data['Fuel_Code'] == Tech]
-            self.Total = Data['Generation'].sum(axis=0)
-            DataNS = Data.drop(['Site_Code','POC_Code','Nwk_Code','Gen_Code','Fuel_Code','Tech_Code'],axis=1).reset_index()
-            self.HourlyTotal = DataNS.groupby(DataNS['Trading_date']).agg({'Generation':'sum'})
-            self.DailyTotal = DataNS.groupby(DataNS['Trading_date'].dt.date).agg({'Generation':'sum'})
-            self.MonthlyTotal = DataNS.groupby(DataNS['Trading_date'].dt.month).agg({'Generation':'sum'})
-            self.Raw = self.Data[self.Data['Fuel_Code'] == Tech]
-        elif OG.Country == 'UK':
-            DataNS = self.Data.reset_index()
-            DataNS.rename(columns={Tech:'Generation'},inplace=True)
-            Data = self.Data[Tech]
-            self.Total = Data.sum(axis=0)
-            self.HourlyTotal = DataNS.groupby(DataNS['Settlement Date']).agg({'Generation':'sum'})
-            self.DailyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.date).agg({'Generation': 'sum'})
-            self.MonthlyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.month).agg({'Generation': 'sum'})
-        elif OG.Country == 'UKSolar':
-            DataNS = self.Data.reset_index()
-            Data = self.Data['Generation']
-            self.Total = Data.sum(axis=0)
-            self.HourlyTotal = DataNS.groupby(DataNS['Settlement Date']).agg({'Generation': 'sum'})
-            self.DailyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.date).agg({'Generation': 'sum'})
-            self.MonthlyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.month).agg({'Generation': 'sum'})
-        elif OG.Country == 'UK2':
-            DataNS = self.Data.reset_index()
-            Data = self.Data[Tech]
-            self.Total = Data.sum(axis=0)
-            DataNS.rename(columns={Tech: 'Generation'}, inplace=True)
-            self.HourlyTotal = DataNS.groupby(DataNS['Settlement Date']).agg({'Generation': 'sum'})
-            self.DailyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.date).agg({'Generation': 'sum'})
-            self.MonthlyTotal = DataNS.groupby(DataNS['Settlement Date'].dt.month).agg({'Generation': 'sum'})
-
-    def SetCarbonIntensity(self, CO2):
-        self.CarbonIntensity = CO2
-        return
-
-    def SetCapacity(self, Cap):
-        self.Capacity = Cap
-        return
-
-    def SetScaler(self, Scaler):
-        self.Scaler = Scaler
-        return
-
-    def Add(self, *args):
-        for a in args:
-            self.HourlyTotal = self.HourlyTotal + a.HourlyTotal
-        return self
-
-class DispatchClass:
-
-    def __init__(self, Name, *args):
-        self.Name = Name
-        self.Technologies = np.empty(0)
-        for i in args:
-            self.Technologies = np.append(self.Technologies, i)
-            setattr(self, str(i.Name), i)
-        #self.Technologies = args
-        self.Total = 0
-        self.HourlyTotal = args[0].HourlyTotal.copy()
-        self.HourlyTotal['Generation'] = 0
-        self.Capacity = 0
-        for i in args:
-            self.Total = self.Total + i.Total
-            self.HourlyTotal = self.HourlyTotal + i.HourlyTotal
-            #self.Capacity = self.Capacity + i.Capacity
-
-    def CarbonIntensity(self):
-        self.Carbon = self.HourlyTotal
-        self.Carbon = 0
-        for i in self.Technologies:
-            i.Carbon = i.HourlyTotal * i.CarbonIntensity
-            i.Carbon = i.Carbon.cumsum()
-            self.Carbon = self.Carbon + i.Carbon
-        return
-
-class Dispatcher:
-
-    def __init__(self, OldGen, DC1, DC2, DC3, DC4):
-        self.DC1 = DC1
-        self.DC2 = DC2
-        self.DC3 = DC3
-        self.DC4 = DC4
-        self.OldGen = OldGen
-
-    def Distribute(self,DC):
-        for Tech in DC.Technologies:
-            TechGeneration = np.ravel(Tech.HourlyTotal.to_numpy())
-            TechGeneration = TechGeneration * Tech.Scaler
-            TechGeneration = np.minimum(TechGeneration, (self.Demand-self.Generation))
-            self.Generation = self.Generation + TechGeneration
-            self.Carbon = self.Carbon + (TechGeneration * Tech.CarbonIntensity)
-            setattr(self, Tech.Name, np.ravel(TechGeneration))
-            setattr(self, Tech.Name + "Carbon", np.ravel((TechGeneration * Tech.CarbonIntensity)))
-        return
-
-    def Dispatch(self):
-
-        self.Dates = self.OldGen.HourlyTotal.index.to_numpy()
-        self.Demand = np.ravel(self.OldGen.HourlyTotal.to_numpy())
-        self.Generation = 0
-        self.Carbon = 0
-
-        self.Distribute(self.DC1)
-
-        DC2Pre = 0
-        for Tech in self.DC2.Technologies:
-            TechGeneration = np.ravel(Tech.HourlyTotal.to_numpy())
-            DC2Pre = DC2Pre + TechGeneration
-
-        self.Distribute(self.DC2)
-
-        DC2Pst = 0
-        for Tech in self.DC2.Technologies:
-            TechGeneration = self.__dict__[Tech.Name]
-            DC2Pst = DC2Pst + TechGeneration
-
-        self.Distribute(self.DC3)
-
-        self.StorageDischarge = 0
-        for Tech in self.DC3.Technologies:
-            TechGeneration = self.__dict__[Tech.Name]
-            self.StorageDischarge = self.StorageDischarge + TechGeneration
-
-        self.DC2Curtailed = DC2Pre - DC2Pst
-        self.StorageSoC = np.zeros(len(self.Demand))
-        StorageRTESQRT = 0.92
-        StorageCapacity = 0#4052
-        StoragePower = 500
-
-        for i in range(0, len(self.StorageSoC)):
-            self.StorageSoC[i] = np.minimum(np.abs(self.StorageSoC[i-1] + (self.DC2Curtailed[i] * StorageRTESQRT) - (self.StorageDischarge[i]/StorageRTESQRT)) , (StorageCapacity) )
-        self.StorageDischarge2 = self.StorageDischarge.copy()
-
-        for i in range(0, len(self.StorageSoC)):
-            self.StorageDischarge2[i] = min((self.Demand[i] - self.Generation[i]), self.StorageSoC[i-1], StoragePower)
-
-        self.StorageDischarge3 = self.StorageDischarge2 + self.StorageDischarge
-
-        self.Carbon = self.Carbon + (self.StorageDischarge3 * self.DC3.PumpedStorage.CarbonIntensity)
-        #self.Generation = self.Generation + self.StorageDischarge3
-
-        self.Distribute(self.DC4)
-
-        if np.any((self.Demand-self.Generation)):
-            for Tech in self.DC4.Technologies:
-                TechGeneration = np.minimum(Tech.Capacity,self.Demand-self.Generation)
-                self.Generation = self.Generation + TechGeneration
-                self.Carbon = self.Carbon + (TechGeneration * Tech.CarbonIntensity)
-                self.__dict__[Tech.Name] = self.__dict__[Tech.Name] + TechGeneration
-                self.__dict__[str(Tech.Name)+"Carbon"] = self.__dict__[str(Tech.Name)+"Carbon"] + (TechGeneration * Tech.CarbonIntensity)
-
-
-        self.Oversupply = self.Generation - self.Demand
-        self.Error = np.where(self.Oversupply != 0, True, False)
-        #self.Carbon = (self.Carbon) * 1*10**-4
-        self.Generation = self.Generation
-        #self.Synchronous = ((np.ravel(self.Nuclear) + np.ravel(self.Hydro) + np.ravel(self.StorageDischarge3) + np.ravel(self.Gas) + np.ravel(self.Coal)) / np.ravel(self.Generation)) * 100
-        return
-
-
 def SweepSolarGen(NG, Start, Stop, Steps, Enhancment):
     Existing = np.linspace(Stop, Start, Steps)
     NewTech = np.linspace(Start, Stop, Steps)
 
-    DynamScale = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    NG = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    DynamScale = NG.DynamScale
+    print(DynamScale)
 
     GenSum = np.ndarray(shape = (len(NG.Mix['Technologies']),len(Existing)))
 
@@ -533,8 +307,12 @@ def SweepSolarGen(NG, Start, Stop, Steps, Enhancment):
         NG = NG.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, NewTech[idx])
         DNG = Dispatch(NG)
 
+        SolarGen = 0
         for jdx, Asset in enumerate(DNG.NG.Mix['Technologies']):
             GenSum[jdx][idx] = np.sum(Asset['Generation']/1000000/2)
+            if Asset['Technology'] == 'Fossil Gas' or Asset['Technology'] == 'Fossil Hard coal': #or Asset['Technology'] == 'SolarNT' or Asset['Technology'] == 'SolarBTMNT':
+                SolarGen = SolarGen + np.sum(Asset['Generation']/1000000/2)
+        print("Gas/Coal Generation (TWh) " + str(idx) + " :" + str(SolarGen))
 
     #Stacks = [Asset['Generation Sum'] for Asset in DNG.Distributed.Mix['Technologies']]
     labels = [Asset['Technology'] for Asset in DNG.Distributed.Mix['Technologies']]
@@ -547,7 +325,9 @@ def SweepSolarCarbon(NG, Start, Stop, Steps,Enhancment):
     Existing = np.linspace(Stop, Start, Steps)
     NewTech = np.linspace(Start, Stop, Steps)
 
-    DynamScale = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    NG = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    DynamScale = NG.DynamScale
+    print(DynamScale)
 
     GenSum = np.ndarray(shape=(len(NG.Mix['Technologies']), len(Existing)))
 
@@ -562,8 +342,12 @@ def SweepSolarCarbon(NG, Start, Stop, Steps,Enhancment):
         NG = NG.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, NewTech[idx])
         DNG = Dispatch(NG)
 
+        C = 0
         for jdx, Asset in enumerate(DNG.Distributed.Mix['Technologies']):
             GenSum[jdx][idx] = np.sum(Asset['CarbonEmissions'] / 2 * (1*10**-9))
+            if Asset['Technology'] == 'Fossil Hard coal':
+                C = C + np.sum(Asset['CarbonEmissions'] / 2 * (1*10**-9))
+        print("Emissions (Mt) " + str(idx) + " :" + str(C))
 
     # Stacks = [Asset['Generation Sum'] for Asset in DNG.Distributed.Mix['Technologies']]
     labels = [Asset['Technology'] for Asset in DNG.Distributed.Mix['Technologies']]
@@ -577,7 +361,8 @@ def CarbonEmissions(NG, Start, Stop, Steps, Enhancment):
     NewTech = np.linspace(Start, Stop, Steps)
 
     NG = NG.MatchDates()
-    DynamScale = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    NG = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    DynamScale = NG.DynamScale
 
     GenSum = np.ndarray(shape=(len(Existing)))
 
@@ -595,7 +380,7 @@ def CarbonEmissions(NG, Start, Stop, Steps, Enhancment):
 
     # Stacks = [Asset['Generation Sum'] for Asset in DNG.Distributed.Mix['Technologies']]
     labels = [Asset['Technology'] for Asset in DNG.Distributed.Mix['Technologies']]
-    plt.plot(NewTech*100, GenSum/GenSum[0] * 100)
+    plt.plot(NewTech*100, GenSum)
     #plt.legend(labels)
     #plt.show()
     return
@@ -603,11 +388,11 @@ def CarbonEmissions(NG, Start, Stop, Steps, Enhancment):
 def MaxGenOfDay(NG,Tech,Enhancment):
 
     NG = NG.MatchDates()
-    DynamScale = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
-
     NG = Grid.Load('Data/2016.NGM')
     NG = NG.Modify('Solar',Scaler=0.5)
     NG = NG.Modify('SolarBTM',Scaler=0.5)
+    NG = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    DynamScale = NG.DynamScale
     NG = NG.DynamicScaleingPVGIS('SolarNT', DynamScale, 0.5)
     NG = NG.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, 0.5)
     NG = NG.MatchDates()
@@ -620,9 +405,57 @@ def MaxGenOfDay(NG,Tech,Enhancment):
             MaxGenTimeMins = [Min/60 for Min in MaxGenTimeMins]
             MaxGenTime = [a+b for a, b in zip(MaxGenTime,MaxGenTimeMins)]
             MaxGen = [Asset['Generation'][Asset['Generation'].index.dayofyear == i].max() for i in range(1, 365)]
-    plt.scatter(range(1,365),MaxGenTime)
+
+            MaxSunTime = [NG.PVGISData['G(i)'][NG.PVGISData['G(i)'].index.dayofyear == i].idxmax().hour for i in range(1, 365)]
+            MaxSunTimeMins = [NG.PVGISData['G(i)'][NG.PVGISData['G(i)'].index.dayofyear == i].idxmax().minute for i in range(1, 365)]
+            MaxSunTimeMins = [Min / 60 for Min in MaxSunTimeMins]
+            MaxSunTime = [a + b for a, b in zip(MaxSunTime, MaxSunTimeMins)]
+            MaxSun = [NG.PVGISData['G(i)'][NG.PVGISData['G(i)'].index.dayofyear == i].max() for i in range(1, 365)]
+
+    #plt.scatter(range(1,365),MaxGenTime)
+    plt.scatter(range(1,365),MaxSunTime)
 
 
+
+    return
+
+def DayIrradiance(NG,Enhancment, Month,Day):
+    NG = Grid.Load('Data/2016.NGM')
+    NG = NG.PVGISFetch(Enhancment, 53.13359, -1.746826)
+    DynamScale = NG.DynamScale
+    Month = NG.PVGISData.loc[NG.PVGISData.index.month == Month]
+    Day = Month.loc[Month.index.day == Day]
+    plt.plot(Day.index,Day['G(i)'])
+    return Day
+
+def AverageDayTechnologies(DNG,*args):
+
+    for Technology in args:
+        for Asset in DNG.NG.Mix['Technologies']:
+            if Technology == Asset['Technology']:
+                Means = Asset['Generation'].groupby(Asset['Generation'].index.hour).mean()
+                plt.plot(Means)
+    return
+
+def AverageDayTechnologiesMonth(DNG, Month, *args):
+    for Technology in args:
+        for Asset in DNG.NG.Mix['Technologies']:
+            if Technology == Asset['Technology']:
+                Means = Asset['Generation'].loc[Asset['Generation'].index.month == Month]
+                Means = Means.groupby(Means.index.hour).mean()
+                plt.plot(Means)
+    return
+
+
+def SolarNoon(NG,Lat,Lon):
+    StartDate = NG.StartDate
+    EndDate = NG.EndDate
+    NumDays = (EndDate - StartDate).days
+    Days = [StartDate + timedelta(days=1 * Day) for Day in range(0, NumDays + 1)]
+    DaysStr = [Day.strftime('%Y-%m-%d') for Day in Days]
+    AllAPIRequests = ['https://api.sunrise-sunset.org/json?lat='+str(Lat)+'&lng='+str(Lon)+'&date='+Day for Day in DaysStr]
+    AllAPIAnswers = [requests.get(APIrequest).json() for APIrequest in AllAPIRequests]
+    #ALLAPISolarNoon = [APIANfor APIAnswer in AllAPIAnswers]
     return
 
 #NationalGrid = Grid("Mix2016.json")
@@ -635,16 +468,45 @@ NationalGrid = NationalGrid.CarbonEmissions()
 NationalGrid = NationalGrid.MatchDates()
 #NationalGrid = NationalGrid.Add('SolarNT','Solar')
 #NationalGrid = NationalGrid.Add('SolarBTMNT','SolarBTM')
-#plt.figure(figsize=(6,8))
-NationalGrid = NationalGrid.Save('Data','2016')
-#SweepSolarCarbon(NationalGrid, 0, 1, 100,'Data/Devices/PolySi.csv')
-#SweepSolarGen(NationalGrid, 0, 1, 100, 'Data/Devices/PolySi.csv')
+#plt.figure(figsize=(8,12))
+#plt.rcParams.update({'font.size': 24})
+#NationalGrid = NationalGrid.Save('Data','2016')
+#SweepSolarCarbon(NationalGrid, 0, 1, 100,'Data/Devices/NewCastle.csv')
+SweepSolarGen(NationalGrid, 0, 1, 100, 'Data/Devices/DSSC.csv')
 #CarbonEmissions(NationalGrid, 0, 1, 100,'Data/Devices/PolySi.csv')
 #CarbonEmissions(NationalGrid, 0, 1, 100,'Data/Devices/NewCastle.csv')
 #CarbonEmissions(NationalGrid, 0, 1, 100,'Data/Devices/DSSC.csv')
-MaxGenOfDay(NationalGrid,'Solar','Data/Devices/DSSC.csv')
-#MaxGenOfDay(NationalGrid,'Solar','Data/Devices/DSSC.csv')
+#MaxGenOfDay(NationalGrid,'SolarBTMNT','Data/Devices/DSSC.csv')
+#MaxGenOfDay(NationalGrid,'SolarBTMNT','Data/Devices/DSSC.csv')
 #MaxGenOfDay(NationalGrid,'SolarNT','Data/Devices/NewCastle.csv')
-plt.ylabel("Time of Max Generation")
-plt.xlabel("Day of Year")
+#DayIrradiance(NationalGrid, 'Data/Devices/DSSC.csv',6,30).to_csv('20160630Irradiance.csv')
+
+
+#NationalGrid = NationalGrid.PVGISFetch('Data/Devices/DSSC.csv', 53.13359, -1.746826)
+#DynamScale = NationalGrid.DynamScale
+#plt.plot(NationalGrid.PVGISData,c='tab:orange')
+#plt.twinx()
+#plt.plot(NationalGrid.PVGISData.index,DynamScale)
+
+#NationalGrid = NationalGrid.Modify('Solar', Scaler=0.5)
+#NationalGrid = NationalGrid.Modify('SolarBTM', Scaler=0.5)
+#NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarNT', DynamScale, 0.5)
+#NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, 0.5)
+#DNG = Dispatch(NationalGrid)
+
+#AverageDayTechnologiesMonth(DNG,1,'Solar','SolarNT')
+#plt.xlabel("Hour of the day")
+#plt.ylabel("Mean Gneeration (MW)")
+#plt.twinx()
+#A = NationalGrid.PVGISData.loc[NationalGrid.PVGISData.index.month == 1]
+#A = A.replace(0, np.NaN)#
+#A = A.groupby(A.index.hour).mean()
+#plt.plot(A.index, A)
+#A = NationalGrid.PVGISData.loc[NationalGrid.PVGISData.index.month == 7]
+#A = A.replace(0, np.NaN)
+#A = A.groupby(A.index.hour).mean()
+#plt.plot(A.index, A)
+#plt.ylabel("Mean Irradiance (Wm$^{-2}$)")
+#plt.ylabel("Carbon Equivalent Emissions (Mt)")
+#plt.xlabel("Proportion of DAPV in Grid (%)")
 plt.show()
