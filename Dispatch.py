@@ -188,12 +188,11 @@ class Grid:
 class Dispatch:
 
     def __init__(self,NG):
-        self.NG = NG
-        self.Distributed = copy.copy(NG)
-        self.Demand = self.NG.Demand
-        self.Generation = self.NG.Demand
+        self.Distributed = copy.deepcopy(NG)
+        self.Demand = self.Distributed.Demand
+        self.Generation = self.Distributed.Demand
         self.Generation = 0
-        self.CarbonEmissions = self.NG.Demand
+        self.CarbonEmissions = self.Distributed.Demand
         self.CarbonEmissions = 0
         self.Order()
         self.Distribute(self.DC1)
@@ -212,7 +211,7 @@ class Dispatch:
         self.DC3 = np.zeros(0)
         self.DC4 = np.zeros(0)
 
-        for Asset in self.NG.Mix['Technologies']:
+        for Asset in self.Distributed.Mix['Technologies']:
             if Asset['DispatchClass'] == 4:
                 self.DC4 = np.append(self.DC4, Asset)
             elif Asset['DispatchClass'] == 3:
@@ -256,7 +255,7 @@ class Dispatch:
         StorageRTESQRT = 0.92
         StoragePower = 500
 
-        for Asset in self.NG.Mix['Technologies']:
+        for Asset in self.Distributed.Mix['Technologies']:
             if Asset['Technology'] == "Hydro Pumped Storage":
                 StorageCapacity = Asset['Capacity']
 
@@ -265,7 +264,7 @@ class Dispatch:
 
         for Asset in self.DC2:
 
-            for AssetPre in self.NG.Mix['Technologies']:
+            for AssetPre in self.Distributed.Mix['Technologies']:
                 if Asset['Technology'] == AssetPre['Technology']:
                     Pre = Pre + np.ravel(AssetPre['Generation'].to_numpy(na_value=0))
 
@@ -446,33 +445,141 @@ def AverageDayTechnologiesMonth(DNG, Month, *args):
                 plt.plot(Means)
     return
 
+def SameCO2Savings(StartingPoint, Target, Itter, *args):
 
-def SolarNoon(NG,Lat,Lon):
-    StartDate = NG.StartDate
-    EndDate = NG.EndDate
-    NumDays = (EndDate - StartDate).days
-    Days = [StartDate + timedelta(days=1 * Day) for Day in range(0, NumDays + 1)]
-    DaysStr = [Day.strftime('%Y-%m-%d') for Day in Days]
-    AllAPIRequests = ['https://api.sunrise-sunset.org/json?lat='+str(Lat)+'&lng='+str(Lon)+'&date='+Day for Day in DaysStr]
-    AllAPIAnswers = [requests.get(APIrequest).json() for APIrequest in AllAPIRequests]
-    #ALLAPISolarNoon = [APIANfor APIAnswer in AllAPIAnswers]
-    return
+    Target_CO2 = 0
+    for Asset in Target.Distributed.Mix['Technologies']:
+         Target_CO2 = Target_CO2 +  (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
 
+    a = 0
+    b = 100
+    if f(a, StartingPoint,Target_CO2) * f(b,StartingPoint,Target_CO2) >= 0:
+        print("fail")
+        return None
+
+    a_n = a
+    b_n = b
+    Progress = np.zeros(0)
+    Progress = np.append(Progress, (a_n + b_n) / 2)
+    for n in range(1, Itter+1):
+        m_n = (a_n + b_n)/2
+        f_m_n = f(m_n, StartingPoint, Target_CO2)
+        if f(a_n, StartingPoint, Target_CO2)*f_m_n < 0:
+            a_n = a_n
+            b_n = m_n
+        elif f(b_n, StartingPoint, Target_CO2)*f_m_n < 0:
+            a_n = m_n
+            b_n = b_n
+        elif f_m_n == 0:
+            print("Exact Solution")
+            print(m_n)
+            return m_n
+        else:
+            print("method fails")
+            return None
+    return (a_n + b_n)/2
+
+def f(x, Start, Target_CO2):
+    Start.Modify('Solar', Scaler=x)
+    Start.Modify('SolarBTM', Scaler=x)
+    Start.Modify('SolarNT', Scaler=0)
+    Start.Modify('SolarBTMNT', Scaler=0)
+    DNG = Dispatch(Start)
+
+    Current_CO2 = 0
+    for Asset in DNG.Distributed.Mix['Technologies']:
+        Current_CO2 = Current_CO2 + (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
+    return Current_CO2 - Target_CO2
+
+def CapacitySpread(Xmin,Xmax,Ymin,Ymax,Step):
+    X = np.arange(Xmin,Xmax,Step)
+    X = np.around(X,3)
+    Y = np.arange(Ymin,Ymax,Step)
+    Y = np.around(Y,3)
+    S = np.zeros((len(X),len(Y)))
+    C = copy.deepcopy(S)
+    T = copy.deepcopy(S)
+    NationalGrid = Grid.Load('Data/2016Raw.NGM')
+    NationalGrid = NationalGrid.Demand()
+    NationalGrid = NationalGrid.CarbonEmissions()
+    NationalGrid = NationalGrid.MatchDates()
+    NationalGrid = NationalGrid.PVGISFetch('Data/Devices/NewCastle.csv', 53.13359, -1.746826)
+    DynamScale = NationalGrid.DynamScale
+    StartBase = copy.deepcopy(NationalGrid)
+    for idx, Sx in enumerate(X):
+        for jdx, Sy in enumerate(Y):
+            NationalGrid = NationalGrid.Modify('Solar', Scaler=Sx)
+            NationalGrid = NationalGrid.Modify('SolarBTM', Scaler=Sx)
+            NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarNT', DynamScale, Sy)
+            NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, Sy)
+            DNG = Dispatch(NationalGrid)
+            Current_CO2 = 0
+            for Asset in DNG.Distributed.Mix['Technologies']:
+                Current_CO2 = Current_CO2 + (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
+            T[idx][jdx] = Current_CO2
+            #print(str(Sx)+":"+str(Sy))
+            S[idx][jdx] = SameCO2Savings(StartBase, DNG, 30)
+            NationalGrid = NationalGrid.Modify('Solar',Scaler=S[idx][jdx])
+            NationalGrid = NationalGrid.Modify('SolarBTM', Scaler=S[idx][jdx])
+            NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarNT', DynamScale, 0)
+            NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, 0)
+            DNG = Dispatch(NationalGrid)
+            Current_CO2 = 0
+            for Asset in DNG.Distributed.Mix['Technologies']:
+                Current_CO2 = Current_CO2 + (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
+            C[idx][jdx] = Current_CO2
+
+    np.savetxt("resutlsS.csv", S, delimiter=",")
+    np.savetxt("resutlsC.csv", C, delimiter=",")
+    np.savetxt("resutlsT.csv", T, delimiter=",")
+    plt.pcolor(S)
+    plt.colorbar()
+    plt.xticks(range(len(Y)),Y)
+    plt.yticks(range(len(X)),X)
+    plt.show()
 #NationalGrid = Grid("Mix2016.json")
 #NationalGrid = NationalGrid.Add('SolarNT','Solar')
 #NationalGrid = NationalGrid.Add('SolarBTMNT','SolarBTM')
 #NationalGrid = NationalGrid.Save('Data','2016Raw')
-NationalGrid = Grid.Load('Data/2016Raw.NGM')
-NationalGrid = NationalGrid.Demand()
-NationalGrid = NationalGrid.CarbonEmissions()
-NationalGrid = NationalGrid.MatchDates()
-#NationalGrid = NationalGrid.Add('SolarNT','Solar')
-#NationalGrid = NationalGrid.Add('SolarBTMNT','SolarBTM')
+
+#NationalGrid = Grid.Load('Data/2016Raw.NGM')
+#NationalGrid = NationalGrid.Demand()
+#NationalGrid = NationalGrid.CarbonEmissions()
+#NationalGrid = NationalGrid.MatchDates()
+
+#NationalGrid = NationalGrid.PVGISFetch('Data/Devices/DSSC.csv', 53.13359, -1.746826)
+#DynamScale = NationalGrid.DynamScale
+#NationalGrid = NationalGrid.Modify('Solar', Scaler=1)
+#NationalGrid = NationalGrid.Modify('SolarBTM', Scaler=1)
+#NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarNT', DynamScale, 1)
+#NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, 1)
+
+#DNG = Dispatch(NationalGrid)
+
+#Current_CO2 = 0
+#for Asset in DNG.Distributed.Mix['Technologies']:
+#    Current_CO2 = Current_CO2 + (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
+#print(Current_CO2)
+
+
+
+#NationalGrid = NationalGrid.Modify('Solar', Scaler=0.9)
+#NationalGrid = NationalGrid.Modify('SolarBTM', Scaler=0.9)
+#DNG = Dispatch(NationalGrid)
+#Current_CO2 = 0
+#for Asset in DNG.Distributed.Mix['Technologies']:
+#    Current_CO2 = Current_CO2 + (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
+#print(Current_CO2)
+
+#print(SameCO2Savings('Data/2016Raw.NGM',DNG,20))
+
+CapacitySpread(0,2,0,2,0.05)
+
 #plt.figure(figsize=(8,12))
 #plt.rcParams.update({'font.size': 24})
 #NationalGrid = NationalGrid.Save('Data','2016')
 #SweepSolarCarbon(NationalGrid, 0, 1, 100,'Data/Devices/NewCastle.csv')
-SweepSolarGen(NationalGrid, 0, 1, 100, 'Data/Devices/DSSC.csv')
+#SweepSolarGen(NationalGrid, 0, 1, 100, 'Data/Devices/DSSC.csv')
 #CarbonEmissions(NationalGrid, 0, 1, 100,'Data/Devices/PolySi.csv')
 #CarbonEmissions(NationalGrid, 0, 1, 100,'Data/Devices/NewCastle.csv')
 #CarbonEmissions(NationalGrid, 0, 1, 100,'Data/Devices/DSSC.csv')
