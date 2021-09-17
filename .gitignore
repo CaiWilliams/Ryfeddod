@@ -128,3 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .csv
+
+#Results Folders
+/Figures
+/Figures NewPD
+/Misc Data
+/Misc Figures
+/PaperFigures
+/NewFigures
