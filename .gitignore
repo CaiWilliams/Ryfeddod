@@ -130,9 +130,9 @@ dmypy.json
 .csv
 
 #Results Folders
-/Figures
-/Figures NewPD
-/Misc Data
-/Misc Figures
-/PaperFigures
-/NewFigures
+Figures/
+Figures NewPD/
+Misc Data/
+Misc Figures/
+PaperFigures/
+NewFigures/
