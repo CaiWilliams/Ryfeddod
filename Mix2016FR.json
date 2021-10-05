@@ -1,0 +1,19 @@
+{
+  "StartDate":"2016-01-01",
+  "EndDate":"2016-12-31",
+  "Country": "DE",
+  "Timezone": "Europe/Paris",
+  "Domain": "France",
+  "Technologies":[
+    {"Technology":"Biomass","Capacity":170,"CarbonIntensity":740,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Gas","Capacity":6121,"CarbonIntensity":490,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Hard coal","Capacity":2930,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Oil","Capacity":6670,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Hydro Pumped Storage","Capacity":4965,"CarbonIntensity":24,"Scaler":1,"DispatchClass":3,"Source":"ENTSOE"},
+    {"Technology":"Hydro Run-of-river and poundage","Capacity":10326,"CarbonIntensity":24,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Hydro Water Reservoir","Capacity":8204,"CarbonIntensity":24,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Nuclear","Capacity":63130,"CarbonIntensity":12,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Solar","Capacity":6772,"CarbonIntensity":48,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Wind Onshore","Capacity":11761,"CarbonIntensity":11,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"}
+  ]
+}

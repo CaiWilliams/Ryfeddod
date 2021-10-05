@@ -13,11 +13,14 @@ from pvlive_api import PVLive
 from scipy.interpolate import interp1d
 import matplotlib.pyplot as plt
 import copy
+import xml.etree.ElementTree as et
 
 class Grid:
 
     def __init__(self,MixDir):
         self.BMRSKey = "zz6sqbg3mg0ybyc"
+        self.ENTSOEKey = "6f7dd5a8-ca23-4f93-80d8-0c6e27533811"
+
         with open(MixDir) as Mix_File:
             self.Mix = json.load(Mix_File)
 
@@ -27,8 +30,9 @@ class Grid:
 
         self.StartDate = datetime.strptime(self.Mix['StartDate'],'%Y-%m-%d')
         self.EndDate = datetime.strptime(self.Mix['EndDate'], '%Y-%m-%d')
+        self.timezone = 'Europe/Prague'
 
-        if self.Mix["Country"] == "UK":
+        if self.Mix["Country"] == "UUK":
             if "BMRS" in DataSources:
                 self.BMRSFetch()
             if "PVLive" in DataSources:
@@ -41,6 +45,111 @@ class Grid:
                 if Tech['Source'] == "PVLive":
                     Tech['Generation'] = self.PVLiveData['generation_mw']
                     Tech['Generation'] = Tech['Generation'].rename('Generation')
+        else:
+            if "ENTSOE" in DataSources:
+                self.domain = self.Mix['Domain']
+                self.ENTSOEFetch()
+
+            for Tech in self.Mix['Technologies']:
+                if Tech['Source'] == 'ENTSOE':
+                    Tech['Generation'] = self.ENTSOEData[str(Tech['Technology'])]
+                    Tech['Generation'] = Tech['Generation'].rename('Generation')
+
+    def convert_period_format(self, date_obj, timezone):
+        timezone = pytz.timezone(timezone)
+        date_obj = timezone.localize(date_obj)
+        date_obj = date_obj.astimezone(pytz.utc)
+        api_format = date_obj.strftime('%Y%m%d%H%M')
+        return api_format
+
+    def ENTSOECodes(self):
+        E = pd.read_csv('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\ENTSOELocations.csv')
+        N = ['Name 0', 'Name 1', 'Name 2']
+
+        for X in N:
+            EX = E[X].dropna().to_list()
+            DN = [string for string in EX if self.domain in string]
+            if len(DN) > 0:
+                break
+
+        Code = E[E[X].isin([DN[0]])]['Code'].values[0]
+        print(Code)
+        return Code
+
+    def aggregated_generation(self, start_period, end_period):
+        base = 'https://transparency.entsoe.eu/api?'
+        security_token = 'securityToken=' + str(self.ENTSOEKey)
+        document_type = 'documentType=A75'
+        process_type = 'processType=A16'
+        in_domain = 'in_domain='+str(self.ENTSOECodes())
+        period_start = 'periodStart=' + str(start_period)
+        period_end = 'periodEnd=' + str(end_period)
+        api_call = base + security_token + '&' + document_type + '&' + process_type + '&' + in_domain + '&' + period_start + '&' + period_end
+        api_answer = requests.get(api_call)
+        return api_answer
+
+    def time_res_to_delta(self,res):
+        res = res.replace('PT', '')
+        res = res.replace('M', '')
+        res = float(res)
+        return timedelta(minutes=res)
+
+    def position_to_time(self, pos, res, start):
+        return [start + (res * x) for x in pos]
+
+    def type_code_to_text(self, asset_type):
+        codes = pd.read_csv('EUPsrType.csv')
+        print(asset_type)
+        return codes[codes['Code'] == asset_type]['Meaning'].values[0]
+
+    def match_dates(self, dic):
+        index_values = [dic[x][0] for x in dic.keys()]
+        common_index_values = list(set.intersection(*map(set, index_values)))
+        for x in dic.keys():
+            times = np.unique(dic[x][0])
+            mask = np.in1d(times, common_index_values)
+            mask = np.where(mask)[0]
+            dic[x] = dic[x][:, mask]
+        return dic
+
+    def ENTSOEFetch(self):
+        start_period = self.convert_period_format(self.StartDate, self.timezone)
+        end_period = self.convert_period_format(self.EndDate, self.timezone)
+        data = self.aggregated_generation(start_period, end_period)
+        root = et.fromstring(data.content)
+        #root = tree.getroot()
+        ns = {'d': 'urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0'}
+        entsoe_data = {}
+        for GenAsset in root.findall('d:TimeSeries', ns):
+            asset_type = GenAsset.find('d:MktPSRType', ns)
+            asset_type = asset_type.find('d:psrType', ns).text
+            asset_type = self.type_code_to_text(asset_type)
+            data = GenAsset.find('d:Period', ns)
+            dates = data.find('d:timeInterval', ns)
+            start_date = datetime.strptime(dates.find('d:start', ns).text, '%Y-%m-%dT%H:%MZ')
+            resolution = data.find('d:resolution', ns).text
+            resolution = self.time_res_to_delta(resolution)
+            generation = data.findall('d:Point', ns)
+            time = [float(x.find('d:position', ns).text) for x in generation]
+            time = self.position_to_time(time, resolution, start_date)
+            generation = [float(x.find('d:quantity', ns).text) for x in generation]
+            tmp = np.vstack((time, generation))
+            if asset_type in entsoe_data:
+                tmp2 = entsoe_data.get(asset_type)
+                tmp2 = np.hstack((tmp2, tmp))
+                entsoe_data[asset_type] = tmp2
+            else:
+                entsoe_data[asset_type] = tmp
+        entsoe_data = self.match_dates(entsoe_data)
+        entsoe_data_pd = pd.DataFrame()
+        for asset in entsoe_data.keys():
+            entsoe_data_pd[asset] = entsoe_data[asset][1]
+            entsoe_data_pd['Settlement Date'] = entsoe_data[asset][0]
+        self.Dates = entsoe_data_pd['Settlement Date']
+        entsoe_data_pd = entsoe_data_pd.set_index('Settlement Date')
+        entsoe_data_pd = entsoe_data_pd.fillna(0)
+        self.ENTSOEData = entsoe_data_pd
+        return self.ENTSOEData
 
     def BMRSFetch(self):
         NumDays = (self.EndDate - self.StartDate).days
@@ -137,6 +246,32 @@ class Grid:
         self.DynamScalepd = PVGISData
         self.DynamScalepd['G(i)'] = self.DynamScale
         #self.DynamScale = np.roll(self.DynamScale, 2)
+        return self
+
+    def DynamScaleFile(self,Dir):
+        DynamScaler = pd.read_csv(Dir, parse_dates=['T'], index_col=['T'])
+        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        CommonIndex = list(set.intersection(*map(set, IndexValues)))  #
+
+        DynamScaler = DynamScaler[DynamScaler.index.isin(CommonIndex)]
+        DynamScaler = DynamScaler['Enhancment'].to_numpy()[1:-1]
+        self.DynamScale = DynamScaler
+        return self
+
+
+    def DynamicScalingFromFile(self,Tech, Dir, BaseScale):
+        DynamScaler = pd.read_csv(Dir, parse_dates=['T'], index_col=['T'])
+        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        CommonIndex = list(set.intersection(*map(set, IndexValues)))#
+
+        DynamScaler = DynamScaler[DynamScaler.index.isin(CommonIndex)]
+        DynamScaler = DynamScaler['Enhancment'].to_numpy()[1:-1]
+        Scale = DynamScaler * BaseScale
+
+        for Asset in self.Mix['Technologies']:
+            if Asset['Technology'] == Tech:
+                Asset['Scaler'] = Scale[:]
+
         return self
 
     def DynamicScaleingPVGIS(self, Tech, DynamScale, BaseScale):
@@ -611,11 +746,26 @@ def Setup(NG,Device,lat,lon):
     NG.PVGISFetch(Device, lat, lon)
     return NG
 
+def SetupFromFile(NG,Device,Location):
+    NG = Grid.Load(NG)
+    NG.MatchDates()
+    NG.Demand()
+    NG.CarbonEmissions()
+    NG.DynamScaleFile(Location)
+    return NG
+
 def Scaling(NG,Solar,SolarBTM,SolarNT,SolarBTMNT):
     NG.Modify('Solar', Scaler=Solar)
     NG.Modify('SolarBTM', Scaler=SolarBTM)
     NG.DynamicScaleingPVGIS('SolarNT', NG.DynamScale, SolarNT)
     NG.DynamicScaleingPVGIS('SolarBTMNT', NG.DynamScale, SolarBTMNT)
+    return NG
+
+def ScalingDynamFromFile(NG,Solar,SolarBTM,SolarNT,SolarBTMNT,EnhancDir):
+    NG.Modify('Solar', Scaler=Solar)
+    NG.Modify('SolarBTM', Scaler=SolarBTM)
+    NG.DynamicScalingFromFile('SolarNT',EnhancDir,SolarNT)
+    NG.DynamicScalingFromFile('SolarBTMNT',EnhancDir,SolarBTMNT)
     return NG
 
 def ScaleAndRunGD(NG,Solar,SolarBTM,SolarNT=0,SolarBTMNT=0):
@@ -877,10 +1027,11 @@ def Silicon_Equivilent(DSSC_CO2, NG):
     return
 
 #NG = Setup('Data/2016RawT.NGM', 'Data/Devices/DSSC.csv', 53.13359, -1.746826)
-#NG = Scaling(NG, 0, 0, 0, 0)
-#DNG = Dispatch(NG)
-#Silicon_Equivilent('resutlsCBangor2.csv',NG)
+NG = SetupFromFile('Data/2016RawT.NGM', 'Data/Devices/DSSC.csv', '500LocationEnhancment.csv')
+NG = Scaling(NG, 0, 0, 0, 0)
+DNG = Dispatch(NG)
 
+#Silicon_Equivilent('resutlsCBangor2.csv',NG)
 
 #SolarGenEndSeveralDevices('Data/2016RawT.NGM', 53.13359, -1.746826, 'Data/Devices/DSSC-50.csv','Data/Devices/DSSC-0.csv','Data/Devices/DSSC+50.csv','Data/Devices/DSSC+100.csv','Data/Devices/DSSC+150.csv','Data/Devices/DSSC+200.csv')
 
@@ -902,7 +1053,8 @@ def Silicon_Equivilent(DSSC_CO2, NG):
 #Diffrent_Introductions('Data/2016RawT.NGM', 'Data/Devices/NewCastle.csv', 53.13359, -1.746826,2,'Newcastle : Si=2')
 #plt.legend()
 
-#NG = Setup('Data/2016RawT.NGM', 'Data/Devices/DSSC.csv', 53.13359, -1.746826)
+#NG = Setup('Data/2016CZ.NGM', 'Data/Devices/DSSC.csv', 53.13359, -1.746826)
+#DNG = Dispatch(NG)
 #NG = Scaling(NG, 1, 1, 0, 0)
 #SweepSolarGen(NG,0,1,100)
 #SweepSolarCarbon(NG,0,1,100)
@@ -911,14 +1063,14 @@ def Silicon_Equivilent(DSSC_CO2, NG):
 #AverageDayTechnologiesMonth('Data/2016RawT.NGM', 7, Device='Data/Devices/Device3.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=0.5, SolarNT=0.5, SolarBTMNT=0.5)
 #AverageDayNamedTechnologies('Data/2016RawT.NGM', 'SolarBTM', 'Nuclear', Device='Data/Devices/DSSC.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=1000000000000, SolarNT=0.5, SolarBTMNT=0.5,Month=12,Day=15)
 
-#NationalGrid = Grid("Mix2015.json")
+#NationalGrid = Grid("Mix2016GB.json")
 #NationalGrid = NationalGrid.Add('SolarNT','Solar')
 #NationalGrid = NationalGrid.Add('SolarBTMNT','SolarBTM')
-#NationalGrid = NationalGrid.Save('Data','2015RawT')
+#NationalGrid = NationalGrid.Save('Data','2016GB')
 
 #AverageDayNamedTechnologies('Data/2016RawT.NGM', 'SolarNT','Solar', 'SolarBTM', 'SolarBTMNT', Device='Data/Devices/test.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=0.5, SolarNT=0.5, SolarBTMNT=0.5,Month=12)
 
-# NationalGrid = Grid.Load('Data/2016Raw.NGM')
+#NationalGrid = Grid.Load('Data/2016CZ.NGM')
 
 #NationalGrid = NationalGrid.MatchDates()
 #NationalGrid = NationalGrid.Demand()
@@ -932,14 +1084,13 @@ def Silicon_Equivilent(DSSC_CO2, NG):
 #NationalGrid = NationalGrid.DynamicScaleingPVGIS('SolarBTMNT', DynamScale, 0.5)
 
 #DNG = Dispatch(NationalGrid)
-
+#plt.plot(np.cumsum(DNG.Generation))
+#plt.show()
 
 #Current_CO2 = 0
 #for Asset in DNG.Distributed.Mix['Technologies']:
 #    Current_CO2 = Current_CO2 + (np.sum(Asset['CarbonEmissions'] / 2 * (1 * 10 ** -9)))
 #print(Current_CO2)
-
-
 
 #NationalGrid = NationalGrid.Modify('Solar', Scaler=0.9)
 #NationalGrid = NationalGrid.Modify('SolarBTM', Scaler=0.9)
@@ -992,4 +1143,4 @@ def Silicon_Equivilent(DSSC_CO2, NG):
 #A = A.groupby(A.index.hour).mean()
 #plt.plot(A.index, A)
 #plt.ylabel("Mean Irradiance (Wm$^{-2}$)")
-plt.show()
+#plt.show()

@@ -1,0 +1,24 @@
+{
+  "StartDate":"2016-01-01",
+  "EndDate":"2016-12-31",
+  "Country": "CZ",
+  "Timezone": "Europe/Prague",
+  "Domain": "Czech Republic",
+  "Technologies":[
+    {"Technology":"Biomass","Capacity":350,"CarbonIntensity":740,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Brown coal/Lignite","Capacity":8334,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Coal-derived gas","Capacity":380,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Gas","Capacity":1226,"CarbonIntensity":490,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Hard coal","Capacity":1200,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Oil","Capacity":0,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Hydro Pumped Storage","Capacity":1172,"CarbonIntensity":24,"Scaler":1,"DispatchClass":3,"Source":"ENTSOE"},
+    {"Technology":"Hydro Run-of-river and poundage","Capacity":431,"CarbonIntensity":24,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Hydro Water Reservoir","Capacity":650,"CarbonIntensity":24,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Nuclear","Capacity":4040,"CarbonIntensity":12,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Other","Capacity":0,"CarbonIntensity":100,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Other renewable","Capacity":500,"CarbonIntensity":10,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Solar","Capacity":2067,"CarbonIntensity":48,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Waste","Capacity":0,"CarbonIntensity":100,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Wind Onshore","Capacity":277,"CarbonIntensity":38,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"}
+  ]
+}

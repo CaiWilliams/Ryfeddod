@@ -25,7 +25,7 @@ for Asset in DNG.Distributed.Mix['Technologies']:
         GenN = Gen.groupby([Gen.index.hour, Gen.index.minute]).mean().to_numpy()
         ExistingSolar = ExistingSolar + GenN
 
-NG = Scaling(NG, 2, 2, 0, 0)
+NG = ScalingDynamFromFile(NG, 2, 2, 0, 0,'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
 DNG = Dispatch(NG)
 
 for Asset in DNG.Distributed.Mix['Technologies']:
@@ -38,7 +38,7 @@ for Asset in DNG.Distributed.Mix['Technologies']:
         GenN = Gen.groupby([Gen.index.hour, Gen.index.minute]).mean().to_numpy()
         Si = Si + GenN
 
-NG = Scaling(NG, 1, 1, 1, 1)
+NG = ScalingDynamFromFile(NG, 1, 1, 1, 1,'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
 DNG = Dispatch(NG)
 
 for Asset in DNG.Distributed.Mix['Technologies']:
@@ -62,6 +62,6 @@ plt.xlabel("Time",fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
 plt.ylabel("Generation (MW)",fontsize=FontSize)
 plt.tight_layout()
-plt.savefig("Figure2e.svg")
-plt.savefig("Figure2e.png")
+#plt.savefig("Figure2e.svg")
+#plt.savefig("Figure2e.png")
 plt.show()

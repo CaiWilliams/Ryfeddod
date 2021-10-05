@@ -13,7 +13,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     Gen.fill(0)
 
     for idx in range(0,steps,1):
-        NG = Scaling(NG, Conv[idx]+1, Conv[idx]+1, Scav[idx], Scav[idx])
+        NG = ScalingDynamFromFile(NG, Conv[idx]+1, Conv[idx]+1, Scav[idx], Scav[idx],'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
         DNG = Dispatch(NG)
 
         for jdx, Asset in enumerate(DNG.Distributed.Mix['Technologies']):
@@ -58,6 +58,6 @@ plt.ylabel('Energy Generated (TWh)',fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
 #plt.legend(labels)
 plt.tight_layout()
-plt.savefig('Figure2b.svg')
-plt.savefig('Figure2b.png')
+#plt.savefig('Figure2b.svg')
+#plt.savefig('Figure2b.png')
 plt.show()

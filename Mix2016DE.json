@@ -1,0 +1,25 @@
+{
+  "StartDate":"2016-01-01",
+  "EndDate":"2016-12-31",
+  "Country": "DE",
+  "Timezone": "Europe/Berlin",
+  "Domain": "Germany",
+  "Technologies":[
+    {"Technology":"Biomass","Capacity":6815,"CarbonIntensity":740,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Brown coal/Lignite","Capacity":21062,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Gas","Capacity":32398,"CarbonIntensity":490,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Hard coal","Capacity":26264,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Fossil Oil","Capacity":4605,"CarbonIntensity":820,"Scaler":1,"DispatchClass":4,"Source":"ENTSOE"},
+    {"Technology":"Hydro Pumped Storage","Capacity":8699,"CarbonIntensity":24,"Scaler":1,"DispatchClass":3,"Source":"ENTSOE"},
+    {"Technology":"Hydro Run-of-river and poundage","Capacity":3996,"CarbonIntensity":24,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Hydro Water Reservoir","Capacity":1518,"CarbonIntensity":24,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Nuclear","Capacity":10793,"CarbonIntensity":12,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Other","Capacity":1286,"CarbonIntensity":100,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Other renewable","Capacity":511,"CarbonIntensity":10,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Solar","Capacity":38686,"CarbonIntensity":48,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Waste","Capacity":1685,"CarbonIntensity":100,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Wind Onshore","Capacity":41168,"CarbonIntensity":11,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Wind Offshore","Capacity":3283,"CarbonIntensity":12,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"},
+    {"Technology":"Geothermal","Capacity":34,"CarbonIntensity":38,"Scaler":1,"DispatchClass":2,"Source":"ENTSOE"}
+  ]
+}
