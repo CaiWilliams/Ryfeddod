@@ -86,7 +86,7 @@ def Enhance(Data, Enhancmentdir):
     f = interp1d(Enhancment['Irradiance'].to_numpy(), Enhancment['Enhanced'].to_numpy(), kind='slinear',fill_value="extrapolate")
     return f(Data)
 
-locations = pd.read_csv('RandomLocs50.csv')
+locations = pd.read_csv('RandomLocs100.csv')
 locations = locations
 latitudes = locations['Latitude'].to_numpy()
 longitudes = locations['Longitude'].to_numpy()
@@ -97,13 +97,13 @@ Time = PVGISFetchTime(latitudes[0], longitudes[0])
 Data = [PVGISFetch(lat,lon) for lat,lon in Cords]
 
 
-Data = [Enhance(x,'Data/Devices/DSSC.csv') for x in Data]
+#Data = [Enhance(x,'Data/Devices/DSSC.csv') for x in Data]
 
 Data = np.sum(Data, axis=0) / len(Data)
 
 D = pd.DataFrame()
 D.index = Time
-D['Enhancment'] = Data
-D.to_csv('50LocationEnhancment.csv')
+D['Irradiance'] = Data
+D.to_csv('100LocationIrradiance.csv')
 
 

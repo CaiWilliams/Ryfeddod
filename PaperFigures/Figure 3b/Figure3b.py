@@ -23,7 +23,7 @@ def Area(Capacity, Eff, Tilt, Width, Elev):
     return Area
 
 def CostSweep(Initial_Capacity, A_cost, C_cost, C_start, C_end, C_eff, S_cost ,S_start, S_end, S_eff):
-    steps = 100
+    steps = 20
     C = (np.linspace(C_start,C_end,steps) * Initial_Capacity) + Initial_Capacity
     S = (np.linspace(S_start,S_end,steps) * Initial_Capacity) + Initial_Capacity
     Cost = np.ndarray(shape=(steps, steps))
@@ -35,7 +35,7 @@ def CostSweep(Initial_Capacity, A_cost, C_cost, C_start, C_end, C_eff, S_cost ,S
     return Cost
 
 def CarbonSweep(NG, C_start, C_end, S_start, S_end):
-    steps = 100
+    steps = 20
     C = np.linspace(C_start, C_end, steps)
     S = np.linspace(S_start, S_end, steps)
     Carbon = np.ndarray(shape=(steps, steps))
@@ -62,7 +62,7 @@ X, Y = np.meshgrid(X, Y)
 fig, ax = plt.subplots(dpi=300)
 plt.rcParams["figure.figsize"] = (12, 12)
 FontSize = 14
-surf = ax.pcolor(X, Y, Carbon/Cost, cmap='inferno')
+surf = ax.pcolormesh(X, Y, Cost/Carbon, cmap='inferno_r', vmax=2e10)
 
 levels = [0.5,1.0,1.5,2,2.5,3,3.5]
 cont = ax.contour(X,Y, (X+Y), levels=levels, colors="w")
@@ -75,7 +75,8 @@ cbar.set_label(label='CO$_2$e Emissions Saved per Unit Cost (Mt Saved/\$)', size
 cbar.ax.tick_params(labelsize=12)
 plt.ylabel('C$_c$', fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
+plt.suptitle('b)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-plt.savefig("Figure3b.svg")
-plt.savefig("Figure3b.png")
+#plt.savefig("Figure3b.svg")
+#plt.savefig("Figure3b.png")
 plt.show()

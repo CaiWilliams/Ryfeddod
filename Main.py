@@ -208,6 +208,7 @@ class Grid:
         EndYear = self.EndDate.year
         PVGISAPICall = "https://re.jrc.ec.europa.eu/api/seriescalc?lat=" + str(Latitude) + "&lon=" + str(Longitude) + "&startyear=" + str(Startyear) + "&endyear=" + str(EndYear) + "&outputformat=csv&optimalinclination=1&optimalangles=1"
         PVGISAnswer = requests.get(PVGISAPICall)
+        print(PVGISAPICall)
         PVGISData = pd.read_csv(io.StringIO(PVGISAnswer.text), skipfooter=9, skiprows=[0, 1, 2, 3, 4, 5, 6, 7], engine='python', usecols=['time', 'G(i)'])
         PVGISData['time'] = pd.to_datetime(PVGISData['time'], format='%Y%m%d:%H%M')
         PVGISData['time'] = [t.replace(minute=0) for t in PVGISData['time']]
@@ -248,16 +249,117 @@ class Grid:
         #self.DynamScale = np.roll(self.DynamScale, 2)
         return self
 
+    def PVGISFetchDefinedDevice(self,Latitude,Longitude,PCE0Sun,PCE1Sun):
+        Startyear = self.StartDate.year
+        EndYear = self.EndDate.year
+        PVGISAPICall = "https://re.jrc.ec.europa.eu/api/seriescalc?lat=" + str(Latitude) + "&lon=" + str(
+            Longitude) + "&startyear=" + str(Startyear) + "&endyear=" + str(
+            EndYear) + "&outputformat=csv&optimalinclination=1&optimalangles=1"
+        PVGISAnswer = requests.get(PVGISAPICall)
+        PVGISData = pd.read_csv(io.StringIO(PVGISAnswer.text), skipfooter=9, skiprows=[0, 1, 2, 3, 4, 5, 6, 7],
+                                engine='python', usecols=['time', 'G(i)'])
+        PVGISData['time'] = pd.to_datetime(PVGISData['time'], format='%Y%m%d:%H%M')
+        PVGISData['time'] = [t.replace(minute=0) for t in PVGISData['time']]
+
+        GHalfHours = PVGISData['G(i)'].to_numpy()
+        GHalfHours = np.insert(GHalfHours, -1, 0)
+        GHalfHours = (GHalfHours[1:] + GHalfHours[:-1]) / 2
+
+        THalfHours = PVGISData['time'] + timedelta(minutes=30)
+        THalfHours = THalfHours.iloc[:]
+
+        HalfHours = pd.DataFrame(THalfHours)
+        HalfHours['G(i)'] = GHalfHours
+
+        PVGISData = pd.concat([PVGISData, HalfHours])
+        PVGISData = PVGISData.sort_values(by=['time'])
+        PVGISData['time'] = [t.replace(year=self.StartDate.year) for t in PVGISData['time']]
+        # PVGISData['time'] = [t + timedelta(minutes=60) for t in PVGISData['time']]
+        utc = tz.gettz('UTC')
+        timezone = tz.gettz('Europe/London')
+        PVGISData['time'] = [t.replace(tzinfo=utc) for t in PVGISData['time']]
+        PVGISData['time'] = [t.astimezone(timezone) for t in PVGISData['time']]
+        # PVGISData['time'] = [t + timedelta(minutes=30) for t in PVGISData['time']]
+        PVGISData = PVGISData.set_index(['time'])
+        PVGISData.index = PVGISData.index.rename('Settlement Date')
+
+        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        CommonIndex = list(set.intersection(*map(set, IndexValues)))
+        PVGISData = PVGISData.loc[PVGISData.index.isin(CommonIndex)]
+        self.PVGISData = copy.deepcopy(PVGISData)
+        y = [PCE1Sun/PCE0Sun, 1]
+        f = interp1d([0,1000], y, kind='linear',fill_value="extrapolate")
+        #x = np.linspace(0,1000,1000)
+        #y = f(x)
+        #plt.plot(x,y)
+        self.DynamScale = f(PVGISData['G(i)'])
+        self.DynamScalepd = PVGISData
+        self.DynamScalepd['G(i)'] = self.DynamScale
+        # self.DynamScale = np.roll(self.DynamScale, 2)
+        return self
+
+    def PVGISFetchDefinedDeviceNOScaling(self,Latitude,Longitude):
+        Startyear = self.StartDate.year
+        EndYear = self.EndDate.year
+        PVGISAPICall = "https://re.jrc.ec.europa.eu/api/seriescalc?lat=" + str(Latitude) + "&lon=" + str(
+            Longitude) + "&startyear=" + str(Startyear) + "&endyear=" + str(
+            EndYear) + "&outputformat=csv&optimalinclination=1&optimalangles=1"
+        PVGISAnswer = requests.get(PVGISAPICall)
+        PVGISData = pd.read_csv(io.StringIO(PVGISAnswer.text), skipfooter=9, skiprows=[0, 1, 2, 3, 4, 5, 6, 7],
+                                engine='python', usecols=['time', 'G(i)'])
+        PVGISData['time'] = pd.to_datetime(PVGISData['time'], format='%Y%m%d:%H%M')
+        PVGISData['time'] = [t.replace(minute=0) for t in PVGISData['time']]
+
+        GHalfHours = PVGISData['G(i)'].to_numpy()
+        GHalfHours = np.insert(GHalfHours, -1, 0)
+        GHalfHours = (GHalfHours[1:] + GHalfHours[:-1]) / 2
+
+        THalfHours = PVGISData['time'] + timedelta(minutes=30)
+        THalfHours = THalfHours.iloc[:]
+
+        HalfHours = pd.DataFrame(THalfHours)
+        HalfHours['G(i)'] = GHalfHours
+
+        PVGISData = pd.concat([PVGISData, HalfHours])
+        PVGISData = PVGISData.sort_values(by=['time'])
+        PVGISData['time'] = [t.replace(year=self.StartDate.year) for t in PVGISData['time']]
+        # PVGISData['time'] = [t + timedelta(minutes=60) for t in PVGISData['time']]
+        utc = tz.gettz('UTC')
+        timezone = tz.gettz('Europe/London')
+        PVGISData['time'] = [t.replace(tzinfo=utc) for t in PVGISData['time']]
+        PVGISData['time'] = [t.astimezone(timezone) for t in PVGISData['time']]
+        # PVGISData['time'] = [t + timedelta(minutes=30) for t in PVGISData['time']]
+        PVGISData = PVGISData.set_index(['time'])
+        PVGISData.index = PVGISData.index.rename('Settlement Date')
+
+        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        CommonIndex = list(set.intersection(*map(set, IndexValues)))
+        PVGISData = PVGISData.loc[PVGISData.index.isin(CommonIndex)]
+        self.PVGISData = copy.deepcopy(PVGISData)
+        return self
+
+    def DynamScaleLinear(self, PCE0, PCE1):
+        y = [PCE0/PCE1, PCE1/PCE1]
+        f = interp1d([0, 1000], y, kind='linear', fill_value="extrapolate")
+        #print(y)
+        #plt.plot(x,y)
+        self.DynamScale = f(self.PVGISData['G(i)'])
+        self.DynamScalepd = self.PVGISData
+        self.DynamScalepd['G(i)'] = self.DynamScale
+        return self
+
     def DynamScaleFile(self,Dir):
         DynamScaler = pd.read_csv(Dir, parse_dates=['T'], index_col=['T'])
-        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
-        CommonIndex = list(set.intersection(*map(set, IndexValues)))  #
 
-        DynamScaler = DynamScaler[DynamScaler.index.isin(CommonIndex)]
+        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        CommonIndex = list(set.intersection(*map(set, IndexValues)))
+        D = DynamScaler.index.to_numpy()
+        DynamScaler = np.in1d(CommonIndex,D)
+        #DynamScaler = DynamScaler[DynamScaler.index.isin(CommonIndex)]
+
         DynamScaler = DynamScaler['Enhancment'].to_numpy()[1:-1]
         self.DynamScale = DynamScaler
         return self
-
 
     def DynamicScalingFromFile(self,Tech, Dir, BaseScale):
         DynamScaler = pd.read_csv(Dir, parse_dates=['T'], index_col=['T'])
@@ -746,6 +848,14 @@ def Setup(NG,Device,lat,lon):
     NG.PVGISFetch(Device, lat, lon)
     return NG
 
+def SetupDefinedDevice(NG,PCE0Sun,PCE1Sun,lat,lon):
+    NG = Grid.Load(NG)
+    NG.MatchDates()
+    NG.Demand()
+    NG.CarbonEmissions()
+    NG.PVGISFetchDefinedDevice(lat, lon, PCE0Sun, PCE1Sun)
+    return NG
+
 def SetupFromFile(NG,Device,Location):
     NG = Grid.Load(NG)
     NG.MatchDates()
@@ -1026,10 +1136,6 @@ def Silicon_Equivilent(DSSC_CO2, NG):
     np.savetxt('GradDec.csv',Results,delimiter=",")
     return
 
-#NG = Setup('Data/2016RawT.NGM', 'Data/Devices/DSSC.csv', 53.13359, -1.746826)
-NG = SetupFromFile('Data/2016RawT.NGM', 'Data/Devices/DSSC.csv', '500LocationEnhancment.csv')
-NG = Scaling(NG, 0, 0, 0, 0)
-DNG = Dispatch(NG)
 
 #Silicon_Equivilent('resutlsCBangor2.csv',NG)
 

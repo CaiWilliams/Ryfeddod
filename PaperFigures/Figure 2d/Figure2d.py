@@ -10,13 +10,14 @@ Irradiance = NG.PVGISData.to_numpy()
 Irradiance = Irradiance[Irradiance != 0]
 plt.rcParams["figure.dpi"] = 300
 FontSize = 14
-plt.hist(Irradiance, bins=10)
+plt.hist(Irradiance, bins=50)
 plt.ylabel("Frequency", fontsize=FontSize)
 plt.xticks(fontsize=FontSize)
-plt.xlabel("Irradiance Wm$^{-2}$", fontsize=FontSize)
+plt.xlabel("Irradiance (Wm$^{-2}$)", fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
 plt.xlim(left=0)
+plt.suptitle('d)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-plt.savefig('Figure2d_10.svg')
-plt.savefig('Figure2d_10.png')
+plt.savefig('Figure2d_50.svg')
+plt.savefig('Figure2d_50.png')
 plt.show()

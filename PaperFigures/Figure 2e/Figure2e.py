@@ -25,7 +25,8 @@ for Asset in DNG.Distributed.Mix['Technologies']:
         GenN = Gen.groupby([Gen.index.hour, Gen.index.minute]).mean().to_numpy()
         ExistingSolar = ExistingSolar + GenN
 
-NG = ScalingDynamFromFile(NG, 2, 2, 0, 0,'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
+#NG = ScalingDynamFromFile(NG, 2, 2, 0, 0,'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
+NG = Scaling(NG,2,2,0,0)
 DNG = Dispatch(NG)
 
 for Asset in DNG.Distributed.Mix['Technologies']:
@@ -38,7 +39,8 @@ for Asset in DNG.Distributed.Mix['Technologies']:
         GenN = Gen.groupby([Gen.index.hour, Gen.index.minute]).mean().to_numpy()
         Si = Si + GenN
 
-NG = ScalingDynamFromFile(NG, 1, 1, 1, 1,'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
+#NG = ScalingDynamFromFile(NG, 0, 0, 1, 1,'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
+NG = Scaling(NG,1,1,1,1)
 DNG = Dispatch(NG)
 
 for Asset in DNG.Distributed.Mix['Technologies']:
@@ -61,7 +63,8 @@ plt.xticks(range(48)[::12],np.arange(0,48,12)*timedelta(minutes=30),fontsize=Fon
 plt.xlabel("Time",fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
 plt.ylabel("Generation (MW)",fontsize=FontSize)
+plt.suptitle('e)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-#plt.savefig("Figure2e.svg")
-#plt.savefig("Figure2e.png")
+plt.savefig("Figure2e.svg")
+plt.savefig("Figure2e.png")
 plt.show()

@@ -13,7 +13,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     Gen.fill(0)
 
     for idx in range(0,steps,1):
-        NG = Scaling(NG, Conv[idx]+1, Conv[idx]+1, Scav[idx], Scav[idx])
+        NG = Scaling(NG, Conv[idx]+1, Conv[idx]+1, 0, 0)
         DNG = Dispatch(NG)
 
         for jdx, Asset in enumerate(DNG.Distributed.Mix['Technologies']):
@@ -49,12 +49,11 @@ plt.annotate('Wind Offshore', xy=(0.95,170),xycoords='data', xytext=(1.1,105),te
 plt.annotate('Hydro Run-of-River', xy=(0.9,163.25),xycoords='data', xytext=(1.1,95),textcoords='data',arrowprops=dict(arrowstyle="->",connectionstyle="angle,angleA=0,angleB=90,rad=10",color="white"),c='white')
 plt.annotate('Hydro Pumped Storage', xy=(0.85,161),xycoords='data', xytext=(1.1,85),textcoords='data',arrowprops=dict(arrowstyle="->",connectionstyle="angle,angleA=0,angleB=90,rad=10",color="white"),c='white')
 
-plt.xlabel('C$_C$',fontsize=FontSize)
+plt.xlabel('Additional Solar Capacity',fontsize=FontSize)
 plt.xlim(left=0,right=2)
 plt.ylabel('Energy Generated (TWh)',fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
 plt.xticks(np.arange(0,2.25,0.25)[::2],fontsize=FontSize)
-plt.suptitle('a)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
 plt.savefig('Figure2a.png')
 plt.savefig('Figure2a.svg')

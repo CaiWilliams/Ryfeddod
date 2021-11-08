@@ -78,7 +78,7 @@ plt.xticks(fontsize=FontSize)
 cbar = plt.colorbar(surf)
 cbar.set_label(label='CO$_2$e Emissions Saved per Unit Area (Mt Saved/m$^2$)', size=12)
 cbar.ax.tick_params(labelsize=12)
-
+plt.suptitle('c)',x=0.05,y=0.99,fontsize=FontSize)
 plt.savefig("Figure3c.svg")
 plt.savefig("Figure3c.png")
 plt.show()
