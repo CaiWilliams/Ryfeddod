@@ -32,7 +32,7 @@ class Grid:
         self.EndDate = datetime.strptime(self.Mix['EndDate'], '%Y-%m-%d')
         self.timezone = 'Europe/Prague'
 
-        if self.Mix["Country"] == "UUK":
+        if self.Mix["Country"] == "UK":
             if "BMRS" in DataSources:
                 self.BMRSFetch()
             if "PVLive" in DataSources:
@@ -73,7 +73,6 @@ class Grid:
                 break
 
         Code = E[E[X].isin([DN[0]])]['Code'].values[0]
-        print(Code)
         return Code
 
     def aggregated_generation(self, start_period, end_period):
@@ -99,7 +98,6 @@ class Grid:
 
     def type_code_to_text(self, asset_type):
         codes = pd.read_csv('EUPsrType.csv')
-        print(asset_type)
         return codes[codes['Code'] == asset_type]['Meaning'].values[0]
 
     def match_dates(self, dic):
@@ -208,7 +206,6 @@ class Grid:
         EndYear = self.EndDate.year
         PVGISAPICall = "https://re.jrc.ec.europa.eu/api/seriescalc?lat=" + str(Latitude) + "&lon=" + str(Longitude) + "&startyear=" + str(Startyear) + "&endyear=" + str(EndYear) + "&outputformat=csv&optimalinclination=1&optimalangles=1"
         PVGISAnswer = requests.get(PVGISAPICall)
-        print(PVGISAPICall)
         PVGISData = pd.read_csv(io.StringIO(PVGISAnswer.text), skipfooter=9, skiprows=[0, 1, 2, 3, 4, 5, 6, 7], engine='python', usecols=['time', 'G(i)'])
         PVGISData['time'] = pd.to_datetime(PVGISData['time'], format='%Y%m%d:%H%M')
         PVGISData['time'] = [t.replace(minute=0) for t in PVGISData['time']]
@@ -241,11 +238,12 @@ class Grid:
         CommonIndex = list(set.intersection(*map(set, IndexValues)))
         PVGISData = PVGISData.loc[PVGISData.index.isin(CommonIndex)]
         self.PVGISData = copy.deepcopy(PVGISData)
+        self.MatchDates_to_PVGIS()
         Enhancment = pd.read_csv(EnhancmentDir)
-        f = interp1d(Enhancment['Irradiance'].to_numpy(), Enhancment['Enhanced'].to_numpy(),kind='slinear', fill_value="extrapolate")
+        f = interp1d(Enhancment['Irradiance'].to_numpy(), Enhancment['Enhanced'].to_numpy(),kind='linear', fill_value="extrapolate")
         self.DynamScale = f(PVGISData['G(i)'])
-        self.DynamScalepd = PVGISData
-        self.DynamScalepd['G(i)'] = self.DynamScale
+        #self.DynamScalepd = PVGISData
+        #self.DynamScalepd['G(i)'] = self.DynamScale
         #self.DynamScale = np.roll(self.DynamScale, 2)
         return self
 
@@ -400,6 +398,24 @@ class Grid:
             Asset['Generation'] = Asset['Generation'][~Asset['Generation'].index.duplicated(keep='first')]
             self.Dates = Asset['Generation'].index
             Lengths[idx] = len(Asset['Generation'].index)
+
+        return self
+
+    def MatchDates_to_PVGIS(self):
+        CommonIndex =  np.array(self.PVGISData.index.tz_convert('UTC')).tolist()
+        #print(CommonIndex)
+        #CommonIndex = [x.astimezone('UTC')for x in CommonIndex]#[Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        # x = [print(type(t)) for t in IndexValues[0]]
+        #CommonIndex = list(set.intersection(*map(set, IndexValues)))
+
+        Lengths = np.zeros(len(self.Mix['Technologies']))
+        for idx, Asset in enumerate(self.Mix['Technologies']):
+            # x = [print(type(t)) for t in Asset['Generation'].index]
+            Asset['Generation'] = Asset['Generation'].loc[Asset['Generation'].index.isin(CommonIndex)]
+            Asset['Generation'] = Asset['Generation'][~Asset['Generation'].index.duplicated(keep='first')]
+            self.Dates = Asset['Generation'].index
+            Lengths[idx] = len(Asset['Generation'].index)
+
         return self
 
     def Demand(self):
@@ -715,7 +731,6 @@ def AverageDayTechnologiesMonth(NG, Month, **kwargs):
         if Asset['Technology'] == 'Nuclear':
             N = Asset['Generation'].loc[Asset['Generation'].index.month == Month]
             N = np.sum(N)
-            print(N)
         M = Asset['Generation'].loc[Asset['Generation'].index.month == Month]
         Means[idx] = M.groupby([M.index.hour,M.index.minute]).mean().to_numpy()
     plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.tab20c.colors)
@@ -783,7 +798,7 @@ def CapacitySpread(NG, Device, lat, lon, Xmin,Xmax,Ymin,Ymax,Step):
             NationalGrid = Scaling(NationalGrid, Sx, Sx, Sy, Sy)
             DNG = Dispatch(NationalGrid)
             S[idx][jdx] = SameCO2Savings(StartBase, DNG, 20)
-            print(idx, jdx)
+
             #NationalGrid = Scaling(NationalGrid, S[idx][jdx], S[idx][jdx], 0, 0)
             #DNG = Dispatch(NationalGrid)
             #Current_CO2 = (np.sum(DNG.CarbonEmissions) / 2 * (1 * 10 ** -9))
@@ -842,10 +857,10 @@ def RerunToGetMoreResults(Xmin,Xmax,Ymin,Ymax,Step):
 
 def Setup(NG,Device,lat,lon):
     NG = Grid.Load(NG)
+    NG.PVGISFetch(Device, lat, lon)
     NG.MatchDates()
     NG.Demand()
     NG.CarbonEmissions()
-    NG.PVGISFetch(Device, lat, lon)
     return NG
 
 def SetupDefinedDevice(NG,PCE0Sun,PCE1Sun,lat,lon):
@@ -864,11 +879,11 @@ def SetupFromFile(NG,Device,Location):
     NG.DynamScaleFile(Location)
     return NG
 
-def Scaling(NG,Solar,SolarBTM,SolarNT,SolarBTMNT):
+def Scaling(NG,Solar,SolarNT):
     NG.Modify('Solar', Scaler=Solar)
-    NG.Modify('SolarBTM', Scaler=SolarBTM)
+    #NG.Modify('SolarBTM', Scaler=SolarBTM)
     NG.DynamicScaleingPVGIS('SolarNT', NG.DynamScale, SolarNT)
-    NG.DynamicScaleingPVGIS('SolarBTMNT', NG.DynamScale, SolarBTMNT)
+    #NG.DynamicScaleingPVGIS('SolarBTMNT', NG.DynamScale, SolarBTMNT)
     return NG
 
 def ScalingDynamFromFile(NG,Solar,SolarBTM,SolarNT,SolarBTMNT,EnhancDir):
@@ -1032,7 +1047,6 @@ def SolarGenFromSeveralDevices(NGdir, lat, lon, *Devices):
     New = np.linspace(0,1,100)
     Existing = np.linspace(1,0,100)
     for Device in Devices:
-        print(Device)
         NG = Setup(NGdir, Device, lat, lon)
         Results = np.zeros(0)
         for N,E in zip(New, Existing):
@@ -1065,7 +1079,6 @@ def CarbonFromSeveralDevices(NGdir, lat, lon, *Devices):
     New = np.linspace(0, 1, 100)
     Existing = np.linspace(1, 0, 100)
     for Device in Devices:
-        print(Device)
         NG = Setup(NGdir, Device, lat, lon)
         NG = Scaling(NG, 1, 1, 0, 0)
         DNG = Dispatch(NG)
@@ -1169,18 +1182,20 @@ def Silicon_Equivilent(DSSC_CO2, NG):
 #AverageDayTechnologiesMonth('Data/2016RawT.NGM', 7, Device='Data/Devices/Device3.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=0.5, SolarNT=0.5, SolarBTMNT=0.5)
 #AverageDayNamedTechnologies('Data/2016RawT.NGM', 'SolarBTM', 'Nuclear', Device='Data/Devices/DSSC.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=1000000000000, SolarNT=0.5, SolarBTMNT=0.5,Month=12,Day=15)
 
-#NationalGrid = Grid("Mix2016GB.json")
+#NationalGrid = Grid("Mix2016_No_BTM.json")
 #NationalGrid = NationalGrid.Add('SolarNT','Solar')
 #NationalGrid = NationalGrid.Add('SolarBTMNT','SolarBTM')
-#NationalGrid = NationalGrid.Save('Data','2016GB')
+#NationalGrid = NationalGrid.PVGISFetch('Data/Devices/DSSC.csv', 53.13359, -1.746826)
+#NationalGrid = NationalGrid.Save('Data','2016_No_BTM')
 
 #AverageDayNamedTechnologies('Data/2016RawT.NGM', 'SolarNT','Solar', 'SolarBTM', 'SolarBTMNT', Device='Data/Devices/test.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=0.5, SolarNT=0.5, SolarBTMNT=0.5,Month=12)
 
-#NationalGrid = Grid.Load('Data/2016CZ.NGM')
+#NationalGrid = Grid.Load('Data/2016_No_BTM.NGM')
 
 #NationalGrid = NationalGrid.MatchDates()
 #NationalGrid = NationalGrid.Demand()
 #NationalGrid = NationalGrid.CarbonEmissions()
+#Grid.Save(NationalGrid,'Data','2016_No_BTM')
 
 #NationalGrid = NationalGrid.PVGISFetch('Data/Devices/DSSC.csv', 53.13359, -1.746826)
 #DynamScale = NationalGrid.DynamScale

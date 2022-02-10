@@ -24,16 +24,23 @@ def Plot_Enhancment(EnhancmentDir):
     return
 
 Bangor = 'Data/Devices/DSSC.csv'
-Newcastle = 'Data/Devices/NewCastle.csv'
+Newcastle48U = 'Data/Devices/Newcastle48U.csv'
+Newcastle24U = 'Data/Devices/Newcastle24U.csv'
+Newcastle18U = 'Data/Devices/Newcastle18U.csv'
+Newcastle12U = 'Data/Devices/Newcastle12U.csv'
+
 
 Plot_Enhancment(Bangor)
-Plot_Enhancment(Newcastle)
-X = np.arange(0,1000,0.01)
-Y = 1000/X
-plt.plot(X,Y)
+Plot_Enhancment(Newcastle12U)
+Plot_Enhancment(Newcastle18U)
+Plot_Enhancment(Newcastle24U)
+Plot_Enhancment(Newcastle48U)
+#X = np.arange(0,1000,0.01)
+#Y = 1000/X
+#plt.plot(X,Y)
 plt.xlabel('Irradiance (Wm$^{-2}$)')
 plt.ylabel('Enhancment')
-plt.xlim(left=0, right=1000)
-plt.ylim(bottom=0, top=15 )
+#plt.xlim(left=0, right=1000)
+#plt.ylim(bottom=0, top=15 )
 plt.tight_layout()
 plt.show()

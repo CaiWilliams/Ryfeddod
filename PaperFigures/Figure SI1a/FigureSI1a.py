@@ -24,7 +24,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
 
     return Conv, Gen
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
+NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle001M.csv', 53.13359, -1.746826)
 Conv, Gen = SweepGeneation(NG,0,2,0,0)
 DNG = Dispatch(NG)
 plt.rcParams["figure.figsize"] = (4, 6)
@@ -37,6 +37,6 @@ plt.xlim(left=0,right=2)
 plt.ylabel('CO$_2$e Emissions Savings (Mt)')
 #plt.legend(labels)
 plt.tight_layout()
-plt.savefig('FigureSI1a.png')
-plt.savefig('FigureSI1a.svg')
+plt.savefig('FigureSI1aNewcastle001M.png')
+plt.savefig('FigureSI1aNewcastle001M.svg')
 plt.show()

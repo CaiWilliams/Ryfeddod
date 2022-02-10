@@ -5,12 +5,12 @@ import numpy as np
 Si_Wp = 0.245
 Si_Eff = 0.20
 DSSC_M = 55
-DSSC_Eff = 0.00787
+DSSC_Eff = 0.425
 Area_M = 0.13
 Capacity_MW = 11912
 Capacity_W = Capacity_MW * 1e6
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\DSSC.csv', 53.13359, -1.746826)
+NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
 NG = Scaling(NG, 1, 1, 0, 0)
 
 def DSSCperM_toW(Manufacturning, Materials, Efficiency):
@@ -32,6 +32,7 @@ def CostSweep(Initial_Capacity, A_cost, C_cost, C_start, C_end, C_eff, S_cost ,S
     for idx in range(0,steps,1):
         for jdx in range(0,steps,1):
             Cost[jdx][idx] = (C[jdx] * C_cost) + (S[idx] * S_cost) + (Area(C[jdx], C_eff, 39, 1.968, 7) * A_cost) + (Area(S[idx], S_eff, 39, 1968, 7) * A_cost)
+            print('Si Device Cost: ', C[jdx] * C_cost, 'DSSC Device Cost:', S[idx] * S_cost, 'Si Area Cost: ', Area(C[jdx], C_eff, 39, 1.968, 7)* A_cost, 'DSSC Area Cost: ', Area(S[idx], S_eff, 39, 1968, 7) * A_cost)
     return Cost
 
 def CarbonSweep(NG, C_start, C_end, S_start, S_end):
@@ -52,7 +53,7 @@ def CarbonSweep(NG, C_start, C_end, S_start, S_end):
     return S, C, Carbon
 
 DSSC_Wp = DSSCperM_toW(1.2, DSSC_M, DSSC_Eff)
-
+print(DSSC_Wp)
 
 Cost = CostSweep(Capacity_W, Area_M, Si_Wp, 0, 2, Si_Eff, DSSC_Wp, 0, 2, DSSC_Eff)
 X, Y, Carbon = CarbonSweep(NG, 0, 2, 0, 2)
@@ -62,7 +63,7 @@ X, Y = np.meshgrid(X, Y)
 fig, ax = plt.subplots(dpi=300)
 plt.rcParams["figure.figsize"] = (12, 12)
 FontSize = 14
-surf = ax.pcolormesh(X, Y, Cost/Carbon, cmap='inferno_r', vmax=2e10)
+surf = ax.pcolormesh(X, Y, Carbon/Cost, cmap='inferno')
 
 levels = [0.5,1.0,1.5,2,2.5,3,3.5]
 cont = ax.contour(X,Y, (X+Y), levels=levels, colors="w")
@@ -75,8 +76,8 @@ cbar.set_label(label='CO$_2$e Emissions Saved per Unit Cost (Mt Saved/\$)', size
 cbar.ax.tick_params(labelsize=12)
 plt.ylabel('C$_c$', fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
-plt.suptitle('b)',x=0.05,y=0.99,fontsize=FontSize)
+#plt.suptitle('b)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-#plt.savefig("Figure3b.svg")
-#plt.savefig("Figure3b.png")
+#plt.savefig("Figure3bNewcastle0MCC.svg")
+#plt.savefig("Figure3bNewcastle0MCC.png")
 plt.show()

@@ -5,14 +5,14 @@ import numpy as np
 Si_Wp = 0.245
 Si_Eff = 0.2
 DSSC_M = 65.09
-DSSC_Eff = 0.0078
+DSSC_Eff = 0.0722
 Area_M = 0.13
 Capacity_MW = 11912
 Capacity_W = Capacity_MW * 1e6
 
 
 fig, ax = plt.subplots(dpi=300)
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
+NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle0M.csv', 53.13359, -1.746826)
 NG = Scaling(NG, 1, 1, 0, 0)
 
 def DSSCperM_toW(Manufacturning, Materials, Efficiency):
@@ -65,7 +65,7 @@ X_Area, Y_Area = np.meshgrid(X_Area, Y_Area)
 
 fig, ax = plt.subplots(dpi=300)
 FontSize = 14
-surf = ax.pcolor(Xm, Ym, Carbon/(X_Area+Y_Area), cmap='inferno')
+surf = ax.pcolor(Xm, Ym, Carbon/(X_Area+Y_Area), cmap='inferno', vmax=4e-8, vmin=0.5e-8)
 
 levels = [0.5,1.0,1.5,2,2.5,3,3.5]
 cont = ax.contour(Xm,Ym, (Xm+Ym), levels=levels, colors="w")
@@ -78,7 +78,7 @@ plt.xticks(fontsize=FontSize)
 cbar = plt.colorbar(surf)
 cbar.set_label(label='CO$_2$e Emissions Saved per Unit Area (Mt Saved/m$^2$)', size=12)
 cbar.ax.tick_params(labelsize=12)
-plt.suptitle('c)',x=0.05,y=0.99,fontsize=FontSize)
-plt.savefig("Figure3c.svg")
-plt.savefig("Figure3c.png")
+#plt.suptitle('c)',x=0.05,y=0.99,fontsize=FontSize)
+plt.savefig("Figure3cNewcastle0MCC.svg")
+plt.savefig("Figure3cNewcastle0MCC.png")
 plt.show()
