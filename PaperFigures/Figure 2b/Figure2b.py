@@ -13,9 +13,8 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     Gen.fill(0)
 
     for idx in range(0,steps,1):
-        NG = Scaling(NG, Conv[idx]+1, Scav[idx])
         #NG = ScalingDynamFromFile(NG, Conv[idx]+1, Conv[idx]+1, Scav[idx], Scav[idx],'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\\100LocationEnhancment.csv')
-        DNG = Dispatch(NG)
+        DNG = Dispatch(NG, Conv[idx]+1, Scav[idx])
 
         for jdx, Asset in enumerate(DNG.Distributed.Mix['Technologies']):
             Gen[jdx][idx] = np.sum(Asset['Generation'] / 1000000 / 2)
@@ -23,9 +22,9 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     return Scav, Gen
 
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_No_BTM.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_CorrectCapacity.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
 Scav, Gen = SweepGeneation(NG,0,0,0,2)
-DNG = Dispatch(NG)
+DNG = Dispatch(NG,1,0)
 FontSize = 14
 plt.rcParams["figure.figsize"] = (5, 6)
 plt.rcParams["figure.dpi"] = 300
@@ -64,6 +63,6 @@ plt.yticks(fontsize=FontSize)
 #plt.legend(labels)
 plt.suptitle('b)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-plt.savefig('Figure2bBangorNoBTMNewcastle48U.svg',transparent=True)
-plt.savefig('Figure2bBangorNoBTMNewcastle48U.png',transparent=True)
-#plt.show()
+#plt.savefig('Figure2bBangorNoBTMNewcastle48U.svg',transparent=True)
+#plt.savefig('Figure2bBangorNoBTMNewcastle48U.png',transparent=True)
+plt.show()

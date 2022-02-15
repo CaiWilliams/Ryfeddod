@@ -187,11 +187,12 @@ class Grid:
         self.PVLiveData.to_csv("BTM.csv")
         return self.PVLiveData
 
-    def Add(self, Name, Tech):
+    def Add(self, Name, Tech, Scaler):
         for Asset in self.Mix['Technologies']:
             if Asset['Technology'] == Tech:
-                Asset_Copy = Asset.copy()
+                Asset_Copy = copy.deepcopy(Asset)
                 Asset_Copy['Technology'] = Name
+                Asset_Copy['Scaler'] = Scaler
                 self.Mix['Technologies'].append(Asset_Copy)
                 return self
 
@@ -377,7 +378,6 @@ class Grid:
     def DynamicScaleingPVGIS(self, Tech, DynamScale, BaseScale):
 
         Scale = DynamScale * BaseScale
-
         for Asset in self.Mix['Technologies']:
             if Asset['Technology'] == Tech:
                 Asset['Scaler'] = Scale[:]
@@ -445,7 +445,7 @@ class Grid:
 
 class Dispatch:
 
-    def __init__(self,NG):
+    def __init__(self,NG,SS,SNTS):
         self.NG = copy.deepcopy(NG)
         self.Original = copy.deepcopy(NG)
         self.Distributed = copy.deepcopy(NG)
@@ -454,6 +454,7 @@ class Dispatch:
         self.Generation = 0
         self.CarbonEmissions = self.Distributed.Demand
         self.CarbonEmissions = 0
+        self.Scaling(SS,SNTS)
         self.Order()
         self.Distribute(self.DC1)
         self.Distribute(self.DC2)
@@ -463,6 +464,13 @@ class Dispatch:
         self.Distribute(self.DC4)
         self.Undersuply()
         self.Misc()
+
+    def Scaling(self,SolarScaler, SolarNTScaler):
+        for Asset in self.Distributed.Mix['Technologies']:
+            if Asset['Technology'] == 'Solar':
+                Asset['Scaler'] = SolarScaler
+            if Asset['Technology'] == 'SolarNT':
+                Asset['Scaler'] = self.NG.DynamScale * SolarNTScaler
 
     def Order(self):
 
@@ -490,6 +498,7 @@ class Dispatch:
             Gen = np.minimum(MaxGen, DemandRemaining)
             #print(Asset['Technology'])
             #if np.sum(MaxGen) > np.sum(DemandRemaining):
+            #    print(Asset['Technology'])
             #    print("OverGeneration!")
             #    return
             self.Generation = self.Generation + Gen
@@ -517,36 +526,55 @@ class Dispatch:
     def Storage(self):
 
         StorageRTE = 0.92
-        StoragePower = 500
         DemandRemaining = self.Demand - self.Generation
 
         for Asset in self.Distributed.Mix['Technologies']:
             if Asset['Technology'] == "Hydro Pumped Storage":
                 StorageCapacity = Asset['Capacity']
-                StorageState = np.minimum(Asset['Generation'],DemandRemaining)
+                StorageIntensity = Asset['CarbonIntensity']
+                self.NormalStorage = np.minimum(Asset['Generation'], DemandRemaining)
 
         Pre = 0
         Post = 0
-
+        StorageCapacity = StorageCapacity * 2
+        StoragePower = StorageCapacity
         for Asset in self.DC2:
-            for AssetPre in self.Original.Mix['Technologies']:
+            for AssetPre in self.NG.Mix['Technologies']:
                 if Asset['Technology'] == AssetPre['Technology']:
-                    Pre = Pre + np.ravel(AssetPre['Generation'].to_numpy(na_value=0))
+                    Pre = Pre + np.ravel((AssetPre['Generation'] * AssetPre['Scaler']).to_numpy(na_value=0))
 
             for AssetPost in self.Distributed.Mix['Technologies']:
                 if Asset['Technology'] == AssetPost['Technology']:
-                    Post = Post + np.ravel(AssetPost['Generation'].to_numpy(na_value=0))
+                    Post = Post + np.ravel((AssetPost['Generation'] * AssetPost['Scaler']).to_numpy(na_value=0))
 
+        self.Pre = Pre
+        self.Post = Post
         self.DC2Curtailed = Post - Pre
 
-        if np.sum(self.DC2Curtailed) == 0:
-            return self
-        else:
-            self.StorageDischarge = np.minimum(DemandRemaining.to_numpy(na_value=0), (StorageState * StorageRTE).to_numpy(na_value=0))
-            PosCharge = (self.DC2Curtailed * StorageRTE) - (self.StorageDischarge / StorageRTE)
-            StorageState = np.minimum(StorageState + PosCharge, StorageCapacity)
-            #self.Generation = self.Generation + StorageDischarge
-            #print("A")
+        self.StorageSOC = np.zeros(len(self.DC2Curtailed))
+        self.StorageDischarge = np.zeros(len(self.DC2Curtailed))
+
+
+
+        for idx in range(len(self.DC2Curtailed)):
+            if idx == 0:
+                self.StorageSOC[idx] = 0
+                self.StorageDischarge[idx] = min(DemandRemaining[idx], self.StorageSOC[idx] * StorageRTE, StorageCapacity)
+            else:
+                self.StorageSOC[idx] = min(self.StorageSOC[idx - 1] + (self.DC2Curtailed[idx] * StorageRTE) - (self.StorageDischarge[idx] / StorageRTE), StoragePower)
+                self.StorageDischarge[idx] = min(DemandRemaining[idx], self.StorageSOC[idx - 1] * StorageRTE, StorageCapacity)
+                self.StorageSOC[idx] = min(self.StorageSOC[idx - 1] + (self.DC2Curtailed[idx] * StorageRTE) - (self.StorageDischarge[idx] / StorageRTE), StoragePower)
+                self.StorageDischarge[idx] = min(DemandRemaining[idx], self.StorageSOC[idx - 1] * StorageRTE,StorageCapacity)
+
+        self.Generation = self.Generation + self.StorageDischarge
+        self.StorageCO2 = self.StorageDischarge * StorageIntensity
+        self.CarbonEmissions = self.CarbonEmissions + self.StorageCO2
+
+        for DissributedAsset in self.Distributed.Mix['Technologies']:
+            if DissributedAsset['Technology'] == "Hydro Pumped Storage":
+                DissributedAsset['Generation'] = DissributedAsset['Generation'] + self.StorageDischarge
+                DissributedAsset['CarbonEmissions'] = DissributedAsset['CarbonEmissions'] + (self.StorageDischarge * DissributedAsset['CarbonIntensity'])
+
 
         return
 
@@ -1182,20 +1210,21 @@ def Silicon_Equivilent(DSSC_CO2, NG):
 #AverageDayTechnologiesMonth('Data/2016RawT.NGM', 7, Device='Data/Devices/Device3.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=0.5, SolarNT=0.5, SolarBTMNT=0.5)
 #AverageDayNamedTechnologies('Data/2016RawT.NGM', 'SolarBTM', 'Nuclear', Device='Data/Devices/DSSC.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=1000000000000, SolarNT=0.5, SolarBTMNT=0.5,Month=12,Day=15)
 
-#NationalGrid = Grid("Mix2016_No_BTM.json")
-#NationalGrid = NationalGrid.Add('SolarNT','Solar')
+#ationalGrid = Grid("Mix2016_CorrectCapacity.json")
+#NationalGrid = NationalGrid.Add('SolarNT', 'Solar', 0)
+#NationalGrid = NationalGrid.Modify('SolarNT', Scaler=0)
 #NationalGrid = NationalGrid.Add('SolarBTMNT','SolarBTM')
 #NationalGrid = NationalGrid.PVGISFetch('Data/Devices/DSSC.csv', 53.13359, -1.746826)
-#NationalGrid = NationalGrid.Save('Data','2016_No_BTM')
+#NationalGrid = NationalGrid.Save('Data','2016_CorrectCapacity')
 
 #AverageDayNamedTechnologies('Data/2016RawT.NGM', 'SolarNT','Solar', 'SolarBTM', 'SolarBTMNT', Device='Data/Devices/test.csv', lat=53.13359, lon=-1.746826, Solar=0.5, SolarBTM=0.5, SolarNT=0.5, SolarBTMNT=0.5,Month=12)
 
-#NationalGrid = Grid.Load('Data/2016_No_BTM.NGM')
+#NationalGrid = Grid.Load('Data/2016_CorrectCapacity.NGM')
 
 #NationalGrid = NationalGrid.MatchDates()
 #NationalGrid = NationalGrid.Demand()
 #NationalGrid = NationalGrid.CarbonEmissions()
-#Grid.Save(NationalGrid,'Data','2016_No_BTM')
+#Grid.Save(NationalGrid,'Data','2016_CorrectCapacity')
 
 #NationalGrid = NationalGrid.PVGISFetch('Data/Devices/DSSC.csv', 53.13359, -1.746826)
 #DynamScale = NationalGrid.DynamScale

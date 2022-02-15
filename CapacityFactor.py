@@ -5,9 +5,8 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_No_BTM.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
-NG = Scaling(NG,1,0)
-DNG = Dispatch(NG)
+NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_CorrectCapacity.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
+DNG = Dispatch(NG,1,0)
 
 print("Cc = 0 Cs = 0, Bangor")
 label = 'Nuclear'
@@ -28,15 +27,14 @@ for Assets in DNG.Distributed.Mix['Technologies']:
         Solar_Generation = Assets['Generation'].values
         Solar_Capacity = Assets['Capacity']
 
-Max_Solar_Gen = 365 * 24 * 11970
+Max_Solar_Gen = 365 * 24 * Solar_Capacity
 Solar_Generation = np.sum(Solar_Generation/2)
 Solar_Capacity_Factor = (Solar_Generation / Max_Solar_Gen) * 100
 print("Solar Capacity Factor: " + str(Solar_Capacity_Factor.round(3)) + " %")
 
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_No_BTM.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
-NG = Scaling(NG,0,1)
-DNG = Dispatch(NG)
+NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_CorrectCapacity.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+DNG = Dispatch(NG,0,1)
 
 print("Cc = 1 Cs = 1, Bangor")
 label = 'Nuclear'
@@ -56,7 +54,7 @@ for Assets in DNG.Distributed.Mix['Technologies']:
         Solar_Generation = Assets['Generation'].values
         Solar_Capacity = Assets['Capacity']
 
-Max_Solar_Gen = 365 * 24 * 11970
+Max_Solar_Gen = 365 * 24 * Solar_Capacity
 Solar_Generation = np.sum(Solar_Generation/2)
 Solar_Capacity_Factor = (Solar_Generation / Max_Solar_Gen) * 100
 print("Solar Capacity Factor: " + str(Solar_Capacity_Factor.round(3)) + " %")
@@ -68,7 +66,7 @@ for Assets in DNG.Distributed.Mix['Technologies']:
         Solar_Generation = Assets['Generation'].values
         Solar_Capacity = Assets['Capacity']
 
-Max_Solar_Gen = 365 * 24 * 11970
+Max_Solar_Gen = 365 * 24 * Solar_Capacity
 Solar_Generation = np.sum(Solar_Generation/2)
 Solar_Capacity_Factor = (Solar_Generation / Max_Solar_Gen) * 100
 print("SolarNT Capacity Factor: " + str(Solar_Capacity_Factor.round(3)) + " %")
