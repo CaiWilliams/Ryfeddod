@@ -1,6 +1,7 @@
 from Main import *
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 Si_Wp = 0.245
 Si_Eff = 0.2
@@ -23,8 +24,6 @@ DSSC_Wp_Low = DSSCperM_toW(1.2, DSSC_M, DSSC_Eff)
 DSSC_Wp_Mean = DSSCperM_toW(1.3, DSSC_M, DSSC_Eff)
 DSSC_Wp_High = DSSCperM_toW(1.4, DSSC_M, DSSC_Eff)
 
-print(DSSC_Wp_Low)
-print(DSSC_Wp_High)
 X = np.linspace(0,2,1000)
 
 Initial_Cost = (Capacity_W * Si_Wp) + (Area(Capacity_MW * 1, Si_Eff, 39, 1.968, 7) * Area_M)
@@ -46,6 +45,6 @@ plt.ylabel("Cost of Installed Capacity ($)", fontsize=FontSize)
 plt.yticks(fontsize=FontSize)
 plt.suptitle('a)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-#plt.savefig("Figure3a.svg")
-#plt.savefig("Figure3a.png")
-plt.show()
+plt.savefig("Figure3a.svg")
+plt.savefig("Figure3a.png")
+#plt.show()

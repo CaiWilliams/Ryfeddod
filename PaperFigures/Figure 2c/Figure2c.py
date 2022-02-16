@@ -22,7 +22,7 @@ def SweepCarbon(NG,C_Start,C_End,S_Start,S_End):
     return Conv, Scav, Gen
 
 fig, ax = plt.subplots(dpi=300)
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_CorrectCapacity.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
 C, S, Gen = SweepCarbon(NG,0,2,0,2)
 C, S = np.meshgrid(C,S)
 surf = ax.pcolor(C,S,Gen,cmap='inferno')
@@ -43,6 +43,6 @@ cbar.set_label(label="CO$_2$e Emissions Savings (Mt)", size=FontSize)
 cbar.ax.tick_params(labelsize=FontSize)
 plt.suptitle('d)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-#plt.savefig("CarbonSavingsBangorNoBTMNewcastle48U.svg",transparent=True)
-#plt.savefig("CarbonSavingsBangorNoBTMNewcastle48U.png",transparent=True)
-plt.show()
+plt.savefig("CarbonSavings.svg",transparent=True)
+plt.savefig("CarbonSavings.png",transparent=True)
+#plt.show()

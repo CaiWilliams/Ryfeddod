@@ -13,8 +13,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     Gen.fill(0)
 
     for idx in range(0,steps,1):
-        NG = Scaling(NG, Conv[idx]+1, Conv[idx]+1, Scav[idx], Scav[idx])
-        DNG = Dispatch(NG)
+        DNG = Dispatch(NG, Conv[idx]+1, Scav[idx])
 
         for jdx, Asset in enumerate(DNG.Distributed.Mix['Technologies']):
             Gen[jdx][idx] = Gen[jdx][idx] +  np.sum(Asset['CarbonEmissions'] / 2 * (1*10**-9))
@@ -24,9 +23,9 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
 
     return Conv, Gen
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle001M.csv', 53.13359, -1.746826)
-Conv, Gen = SweepGeneation(NG,0,2,0,0)
-DNG = Dispatch(NG)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+Conv, Gen = SweepGeneation(NG, 0, 2, 0, 0)
+DNG = Dispatch(NG, 1, 0)
 plt.rcParams["figure.figsize"] = (4, 6)
 plt.rcParams["figure.dpi"] = 300
 plt.rcParams["axes.prop_cycle"] = plt.cycler("color", plt.cm.tab10.colors)
@@ -37,6 +36,6 @@ plt.xlim(left=0,right=2)
 plt.ylabel('CO$_2$e Emissions Savings (Mt)')
 #plt.legend(labels)
 plt.tight_layout()
-plt.savefig('FigureSI1aNewcastle001M.png')
-plt.savefig('FigureSI1aNewcastle001M.svg')
+plt.savefig('FigureSI1a.png')
+plt.savefig('FigureSI1a.svg')
 plt.show()

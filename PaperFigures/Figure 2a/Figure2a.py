@@ -21,7 +21,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     return Conv, Gen
 
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_CorrectCapacity.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
 Conv, Gen = SweepGeneation(NG,0,2,0,0)
 DNG = Dispatch(NG,1,0)
 FontSize = 14
@@ -57,6 +57,6 @@ plt.yticks(fontsize=FontSize)
 plt.xticks(np.arange(0,2.25,0.25)[::2],fontsize=FontSize)
 plt.suptitle('a)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-#plt.savefig('Figure2aBangorNoBTM.png',Transparent=True)
-#plt.savefig('Figure2aBangorNoBTM.svg',Transparent=True)
-plt.show()
+plt.savefig('Figure2a.png',Transparent=True)
+plt.savefig('Figure2a.svg',Transparent=True)
+#plt.show()

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 
-NG = Setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016RawT.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
 Irradiance = NG.PVGISData.to_numpy()
 Irradiance = Irradiance[Irradiance != 0]
 plt.rcParams["figure.dpi"] = 300
@@ -18,6 +18,6 @@ plt.yticks(fontsize=FontSize)
 plt.xlim(left=0)
 plt.suptitle('d)',x=0.05,y=0.99,fontsize=FontSize)
 plt.tight_layout()
-plt.savefig('Figure2d_50.svg',transparent=True)
-plt.savefig('Figure2d_50.png',transparent=True)
+#plt.savefig('Figure2d_50.svg',transparent=True)
+#plt.savefig('Figure2d_50.png',transparent=True)
 plt.show()
