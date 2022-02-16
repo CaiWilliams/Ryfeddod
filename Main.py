@@ -485,6 +485,7 @@ def setup(ng, device, lat, lon):
 def create_file(mix_dir, file_name):
     NG = Grid(mix_dir)
     NG.match_dates()
+    NG.add('SolarNT','Solar',0)
     NG.save('Data', file_name)
     return
 

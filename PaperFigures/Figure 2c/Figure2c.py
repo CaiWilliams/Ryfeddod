@@ -22,7 +22,7 @@ def SweepCarbon(NG,C_Start,C_End,S_Start,S_End):
     return Conv, Scav, Gen
 
 fig, ax = plt.subplots(dpi=300)
-NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\NationalGrid_2016.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
 C, S, Gen = SweepCarbon(NG,0,2,0,2)
 C, S = np.meshgrid(C,S)
 surf = ax.pcolor(C,S,Gen,cmap='inferno')

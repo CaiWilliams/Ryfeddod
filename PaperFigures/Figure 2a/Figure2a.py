@@ -21,7 +21,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     return Conv, Gen
 
 
-NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\NationalGrid_2016.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv', 53.13359, -1.746826)
 Conv, Gen = SweepGeneation(NG,0,2,0,0)
 DNG = Dispatch(NG,1,0)
 FontSize = 14

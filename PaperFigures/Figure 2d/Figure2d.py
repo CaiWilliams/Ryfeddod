@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 
-NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016BMRS.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
+NG = setup('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\NationalGrid_2016.NGM', 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\DSSC.csv', 53.13359, -1.746826)
 Irradiance = NG.PVGISData.to_numpy()
 Irradiance = Irradiance[Irradiance != 0]
 plt.rcParams["figure.dpi"] = 300
