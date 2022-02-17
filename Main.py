@@ -333,7 +333,7 @@ class Grid:
 class Dispatch:
 
     # Initialises and dispatches the grid object given
-    def __init__(self, ng, ss, snts):
+    def __init__(self, ng):
         self.NG = copy.deepcopy(ng)
         self.Original = copy.deepcopy(ng)
         self.Distributed = copy.deepcopy(ng)
@@ -343,18 +343,27 @@ class Dispatch:
         self.CarbonEmissions = self.Distributed.Demand
         self.CarbonEmissions = 0
 
+    def run(self, ss, snts):
+
         self.scaling(ss, snts)
+
+        self.set_dispatch_class('Hydro Pumped Storage', 2)
 
         self.order()
 
         self.distribute(self.DC1)
         self.distribute(self.DC2)
-        self.distribute(self.DC3)
+
+        self.set_scaler('Hydro Pumped Storage', 0)
+
+        #self.distribute(self.DC3)
 
         self.storage()
         self.distribute(self.DC4)
         self.undersupply()
         self.misc()
+
+        return self
 
     # Sets the scaling the for traditional solar and new technology solar
     def scaling(self, solar_scaler, solar_nt_scaler):
@@ -363,6 +372,18 @@ class Dispatch:
                 Asset['Scaler'] = solar_scaler
             if Asset['Technology'] == 'SolarNT':
                 Asset['Scaler'] = self.NG.DynamScale * solar_nt_scaler
+
+
+    def set_scaler(self,name,scaler):
+        for Asset in self.Distributed.Mix['Technologies']:
+            if Asset['Technology'] == name:
+                Asset['Scaler'] = scaler
+        return self
+
+    def set_dispatch_class(self, name, dispatch_class):
+        for Asset in self.Distributed.Mix['Technologies']:
+            if Asset['Technology'] == name:
+                Asset['DispatchClass'] = dispatch_class
 
     # Sets the order which each dispatch class will be distributed (Order writen in .json file)
     def order(self):
@@ -429,6 +450,7 @@ class Dispatch:
         Pre = 0
         Post = 0
         StoragePower = StorageCapacity
+
         for Asset in self.DC2:
             for AssetPre in self.NG.Mix['Technologies']:
                 if Asset['Technology'] == AssetPre['Technology']:
@@ -462,8 +484,7 @@ class Dispatch:
         for DissributedAsset in self.Distributed.Mix['Technologies']:
             if DissributedAsset['Technology'] == "Hydro Pumped Storage":
                 DissributedAsset['Generation'] += self.StorageDischarge
-                DissributedAsset['CarbonEmissions'] = DissributedAsset['CarbonEmissions'] + (
-                        self.StorageDischarge * DissributedAsset['CarbonIntensity'])
+                DissributedAsset['CarbonEmissions'] = DissributedAsset['CarbonEmissions'] + (self.StorageDischarge * DissributedAsset['CarbonIntensity'])
 
         return
 

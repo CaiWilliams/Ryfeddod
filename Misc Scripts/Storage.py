@@ -8,7 +8,7 @@ def StorageUsage(NG,SNTS):
     SNTS = np.linspace(0, SNTS, Steps)
     U = np.zeros(Steps)
     for idx,x in enumerate(SNTS):
-        DNG = Dispatch(NG, 1, 1)
+        DNG = Dispatch(NG, 1, 0)
         #for Asset in DNG.Distributed.Mix['Technologies']:
             #if Asset['Technology'] == 'Hydro Pumped Storage':
             #   U[idx] = np.sum(Asset['Generation']/ 1000000 / 2)
