@@ -7,18 +7,18 @@ import pickle
 import pytz
 import requests
 import io
-from pvlive_api import PVLive
+#from pvlive_api import PVLive
 from scipy.interpolate import interp1d
 import copy
 import xml.etree.ElementTree as et
-
+import os
 
 class Grid:
 
     #Initialises and fetches the data from the assigned data sources form the mix_dir file
     def __init__(self, mix_dir):
-        self.BMRSKey = "zz6sqbg3mg0ybyc"
-        self.ENTSOEKey = "6f7dd5a8-ca23-4f93-80d8-0c6e27533811"
+        self.BMRSKey = "zz6sqbg3mg0ybyc" # To run please obtain an API key for BMRS
+        self.ENTSOEKey = "6f7dd5a8-ca23-4f93-80d8-0c6e27533811" # To run please obtain an API key for ENTSOE
 
         with open(mix_dir) as Mix_File:
             self.Mix = json.load(Mix_File)
@@ -31,33 +31,29 @@ class Grid:
         self.EndDate = datetime.strptime(self.Mix['EndDate'], '%Y-%m-%d')
         self.timezone = 'Europe/London'
 
-        if self.Mix["Country"] == "UK":
-            if "BMRS" in DataSources:
-                self.bmrs_fetch()
-            if "PVLive" in DataSources:
-                self.pv_live_fetch()
+        if "BMRS" in DataSources:
+            self.bmrs_fetch()
+        if "PVLive" in DataSources:
+            self.pv_live_fetch()
 
-            for Tech in self.Mix['Technologies']:
-                if Tech['Source'] == "BMRS":
-                    Tech['Generation'] = self.BMRSData[str(Tech['Technology'])]
-                    Tech['Generation'] = Tech['Generation'].rename(
-                        'Generation')
-                if Tech['Source'] == "PVLive":
-                    Tech['Generation'] = self.PVLiveData['generation_mw']
-                    Tech['Generation'] = Tech['Generation'].rename(
-                        'Generation')
-        else:
-            if "ENTSOE" in DataSources:
-                self.domain = self.Mix['Domain']
-                self.entsoe_fetch()
+        for Tech in self.Mix['Technologies']:
+            if Tech['Source'] == "BMRS":
+                Tech['Generation'] = self.BMRSData[str(Tech['Technology'])]
+                Tech['Generation'] = Tech['Generation'].rename(
+                    'Generation')
+            if Tech['Source'] == "PVLive":
+                Tech['Generation'] = self.PVLiveData['generation_mw']
+                Tech['Generation'] = Tech['Generation'].rename('Generation')
 
-            for Tech in self.Mix['Technologies']:
-                if Tech['Source'] == 'ENTSOE':
-                    Tech['Generation'] = self.ENTSOEData[str(
-                        Tech['Technology'])]
-                    Tech['Generation'] = Tech['Generation'].rename(
-                        'Generation')
+        if "ENTSOE" in DataSources:
+            self.timezone = self.Mix['Timezone']
+            self.domain = self.Mix['Domain']
+            self.entsoe_fetch()
 
+        for Tech in self.Mix['Technologies']:
+            if Tech['Source'] == 'ENTSOE':
+                Tech['Generation'] = self.ENTSOEData[str(Tech['Technology'])]
+                Tech['Generation'] = Tech['Generation'].rename('Generation')
     # Converts Mix file start and tend period to match ENTSOE format
     def convert_period_format(self, date_obj, timezone):
         timezone = pytz.timezone(timezone)
@@ -82,7 +78,7 @@ class Grid:
 
     # Fetches aggregated generation data for the specified domain and time from ENTSOE
     def aggregated_generation(self, start_period, end_period):
-        base = 'https://transparency.entsoe.eu/api?'
+        base = 'https://web-api.tp.entsoe.eu/api?'
         security_token = 'securityToken=' + str(self.ENTSOEKey)
         document_type = 'documentType=A75'
         process_type = 'processType=A16'
@@ -126,7 +122,6 @@ class Grid:
         start_period = self.convert_period_format(self.StartDate, self.timezone)
         end_period = self.convert_period_format(self.EndDate, self.timezone)
         data = self.aggregated_generation(start_period, end_period)
-
         root = et.fromstring(data.content)
         ns = {'d': 'urn:iec62325.351:tc57wg16:451-6:generationloaddocument:3:0'}
         entsoe_data = {}
@@ -162,6 +157,7 @@ class Grid:
         self.Dates = entsoe_data_pd['Settlement Date']
         entsoe_data_pd = entsoe_data_pd.set_index('Settlement Date')
         entsoe_data_pd = entsoe_data_pd.fillna(0)
+        entsoe_data_pd.index = entsoe_data_pd.index.tz_localize('UTC').tz_convert(self.timezone)
         self.ENTSOEData = entsoe_data_pd
 
         return self.ENTSOEData
@@ -239,7 +235,7 @@ class Grid:
 
         Startyear = self.StartDate.year
         EndYear = self.EndDate.year
-        PVGISAPICall = "https://re.jrc.ec.europa.eu/api/seriescalc?lat=" + str(latitude) + "&lon=" + str(longitude) + "&startyear=" + str(Startyear) + "&endyear=" + str(EndYear) + "&outputformat=csv&optimalinclination=1&optimalangles=1"
+        PVGISAPICall = "https://re.jrc.ec.europa.eu/api/v5_2/seriescalc?lat=" + str(latitude) + "&lon=" + str(longitude) + "&startyear=" + str(Startyear) + "&endyear=" + str(EndYear) + "&outputformat=csv&optimalinclination=1&optimalangles=1"
         PVGISAnswer = requests.get(PVGISAPICall)
 
         PVGISData = pd.read_csv(io.StringIO(PVGISAnswer.text), skipfooter=9, skiprows=[0, 1, 2, 3, 4, 5, 6, 7], engine='python', usecols=['time', 'G(i)'])
@@ -257,20 +253,24 @@ class Grid:
         PVGISData = PVGISData.sort_values(by=['time'])
         PVGISData['time'] = [t.replace(year=self.StartDate.year) for t in PVGISData['time']]
         utc = tz.gettz('UTC')
-        timezone = tz.gettz('Europe/London')
-        PVGISData['time'] = [t.replace(tzinfo=utc) for t in PVGISData['time']]
-        PVGISData['time'] = [t.astimezone(timezone) for t in PVGISData['time']]
+        timezone = tz.gettz(self.timezone)
+        #PVGISData['time'] = [t.replace(tzinfo=utc) for t in PVGISData['time']]
+        #PVGISData['time'] = [t.astimezone(timezone) for t in PVGISData['time']]
+        #PVGISData['time'] = PVGISData['time'].tz_localize('UTC').tz_convert(self.timezone)
         PVGISData = PVGISData.set_index(['time'])
+        PVGISData.index = PVGISData.index.tz_localize('UTC').tz_convert(self.timezone)
         PVGISData.index = PVGISData.index.rename('Settlement Date')
+        PVGISData.index = PVGISData.index
 
         IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
         CommonIndex = list(set.intersection(*map(set, IndexValues)))
         PVGISData = PVGISData.loc[PVGISData.index.isin(CommonIndex)]
+
         self.PVGISData = copy.deepcopy(PVGISData)
         self.match_dates_to_pvgis()
         Enhancment = pd.read_csv(enhancment_dir)
         f = interp1d(Enhancment['Irradiance'].to_numpy(), Enhancment['Enhanced'].to_numpy(), fill_value="extrapolate")
-        self.DynamScale = f(PVGISData['G(i)'])
+        self.DynamScale = f(self.PVGISData['G(i)'])
         return self
 
     # Match dates from each data source to each other
@@ -290,7 +290,7 @@ class Grid:
 
     # Match dates from PVGIS to other sources
     def match_dates_to_pvgis(self):
-        CommonIndex = np.array(self.PVGISData.index.tz_convert('UTC')).tolist()
+        CommonIndex = self.PVGISData.index.tolist()
 
         Lengths = np.zeros(len(self.Mix['Technologies']))
         for idx, Asset in enumerate(self.Mix['Technologies']):
@@ -320,7 +320,7 @@ class Grid:
 
     # Saves the class object as a pickle fine (.NGM [National Grid Mix])
     def save(self, f_dir, filename):
-        with open(str(f_dir) + '\\' + str(filename) + '.NGM', 'wb') as handle:
+        with open(os.path.join(os.getcwd(),f_dir,str(filename) + '.NGM'), 'wb') as handle:
             pickle.dump(self, handle, protocol=pickle.HIGHEST_PROTOCOL)
         return self
 
@@ -373,6 +373,20 @@ class Dispatch:
             if Asset['Technology'] == 'SolarNT':
                 Asset['Scaler'] = self.NG.DynamScale * solar_nt_scaler
 
+    def DynamicScalingFromFile(self,Tech, Dir, BaseScale):
+        DynamScaler = pd.read_csv(Dir, parse_dates=['T'], index_col=['T'])
+        IndexValues = [Asset['Generation'].index for Asset in self.Mix['Technologies']]
+        CommonIndex = list(set.intersection(*map(set, IndexValues)))#
+
+        DynamScaler = DynamScaler[DynamScaler.index.isin(CommonIndex)]
+        DynamScaler = DynamScaler['Enhancment'].to_numpy()[1:-1]
+        Scale = DynamScaler * BaseScale
+
+        for Asset in self.Mix['Technologies']:
+            if Asset['Technology'] == Tech:
+                Asset['Scaler'] = Scale[:]
+
+        return self
 
     def set_scaler(self,name,scaler):
         for Asset in self.Distributed.Mix['Technologies']:
@@ -407,6 +421,7 @@ class Dispatch:
     # Distributes the given dispatch class
     def distribute(self, dc):
         for Asset in dc:
+
             MaxGen = Asset['Generation'] * Asset['Scaler']
             DemandRemaining = self.Demand - self.Generation
             Gen = np.minimum(MaxGen, DemandRemaining)
@@ -512,4 +527,7 @@ def create_file(mix_dir, file_name):
 
 
 if __name__ == "__main__":
-    create_file('Mix2016.json', 'NationalGrid_2016')
+    #create_file('Mix2016DE.json', '2016DE')
+    #create_file('Mix2016CZ.json', '2016CZ')
+    #create_file('Mix2016FR.json', '2016FR')
+    create_file('Mix2016GB.json', '2016GB')
