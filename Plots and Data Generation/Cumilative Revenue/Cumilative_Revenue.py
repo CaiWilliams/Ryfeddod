@@ -29,9 +29,9 @@ Price = market_index_data['Market Index Price(£/MWh)'] * 1.356
 
 
 #ng = 'C:\\Users\cai_w\Documents\Programming\Ryfeddod\Data\\NationalGrid_2016.NGM'
-ng = os.path.join(os.path.dirname(os.getcwd()),'Data','NationalGrid_2016.NGM')
+ng = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','NationalGrid_2016.NGM')
 #device = 'C:\\Users\cai_w\Documents\Programming\Ryfeddod\Data\Devices\\Newcastle48U.csv'
-device = os.path.join(os.path.dirname(os.getcwd()),'Data','Devices','Newcastle48U.csv')
+device = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','Devices','Newcastle48U.csv')
 lat = 53.13359
 lon = -1.746826
 
@@ -87,9 +87,9 @@ solarNT_rev = Gen * Price
 plt.plot(np.cumsum(solar_rev))
 plt.plot(np.cumsum(solarNT_rev))
 
-ng = os.path.join(os.path.dirname(os.getcwd()),'Data','NationalGrid_2016.NGM')
+ng = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','NationalGrid_2016.NGM')
 #device = 'C:\\Users\cai_w\Documents\Programming\Ryfeddod\Data\Devices\\Newcastle48U.csv'
-device = os.path.join(os.path.dirname(os.getcwd()),'Data','Devices','DSSC.csv')
+device = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','Devices','Newcastle12U.csv')
 lat = 53.13359
 lon = -1.746826
 
@@ -144,6 +144,7 @@ solarNT_rev = Gen * Price
 
 plt.plot(np.cumsum(solarNT_rev))
 
+print(np.sum(solar_rev))
 
 plt.xlabel('Date and Time')
 plt.ylabel('Cumilative Revenue (€)')

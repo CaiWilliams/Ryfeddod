@@ -342,6 +342,8 @@ class Dispatch:
         self.Generation = 0
         self.CarbonEmissions = self.Distributed.Demand
         self.CarbonEmissions = 0
+        self.Storage = self.Distributed.Demand
+        self.Storage = 0
 
     def run(self, ss, snts):
 
@@ -425,6 +427,7 @@ class Dispatch:
             MaxGen = Asset['Generation'] * Asset['Scaler']
             DemandRemaining = self.Demand - self.Generation
             Gen = np.minimum(MaxGen, DemandRemaining)
+            self.Storage += np.maximum(0,MaxGen-DemandRemaining)
             self.Generation = self.Generation + Gen
             self.CarbonEmissions = self.CarbonEmissions + (Gen * Asset['CarbonIntensity'])
             for DissributedAsset in self.Distributed.Mix['Technologies']:
@@ -462,23 +465,24 @@ class Dispatch:
                 StorageIntensity = Asset['CarbonIntensity']
                 self.NormalStorage = np.minimum(Asset['Generation'], DemandRemaining)
 
-        Pre = 0
-        Post = 0
+        # Pre = 0
+        # Post = 0
         StoragePower = StorageCapacity
+        #
+        # for Asset in self.DC2:
+        #     for AssetPre in self.NG.Mix['Technologies']:
+        #         if Asset['Technology'] == AssetPre['Technology']:
+        #             Pre += np.ravel((AssetPre['Generation'] * AssetPre['Scaler']).to_numpy(na_value=0))
+        #
+        #     for AssetPost in self.Distributed.Mix['Technologies']:
+        #         if Asset['Technology'] == AssetPost['Technology']:
+        #             Post += np.ravel((AssetPost['Generation'] * AssetPost['Scaler']).to_numpy(na_value=0))
+        #
+        # self.Pre = Pre
+        # self.Post = Post
+        # self.DC2Curtailed = Post - Pre
 
-        for Asset in self.DC2:
-            for AssetPre in self.NG.Mix['Technologies']:
-                if Asset['Technology'] == AssetPre['Technology']:
-                    Pre += np.ravel((AssetPre['Generation'] * AssetPre['Scaler']).to_numpy(na_value=0))
-
-            for AssetPost in self.Distributed.Mix['Technologies']:
-                if Asset['Technology'] == AssetPost['Technology']:
-                    Post += np.ravel((AssetPost['Generation'] * AssetPost['Scaler']).to_numpy(na_value=0))
-
-        self.Pre = Pre
-        self.Post = Post
-        self.DC2Curtailed = Post - Pre
-
+        self.DC2Curtailed = self.Storage
         self.StorageSOC = np.zeros(len(self.DC2Curtailed))
         self.StorageDischarge = np.zeros(len(self.DC2Curtailed))
 

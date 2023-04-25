@@ -26,7 +26,7 @@ def SweepGeneation(NG,C_Start,C_End,S_Start,S_End):
     return Scav, Gen
 
 grid_dir = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','NationalGrid_2016.NGM')
-device_dir = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','Devices','Newcastle24u.csv')
+device_dir = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())),'Data','Devices','Newcastle48U.csv')
 NG = setup(grid_dir, device_dir, 53.13359, -1.746826)
 Conv, Gen = SweepGeneation(NG, 0, 0, 0, 2)
 DNG = Dispatch(NG)

@@ -14,7 +14,7 @@ def match_dates(Gen,Price):
 
     return Gen,Price
 
-market_index_data = pd.read_csv('C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\2016_MID.csv', delimiter=',')
+market_index_data = pd.read_csv(os.path.join(os.path.dirname(os.getcwd()),'Data','2016_MID.csv'), delimiter=',')
 
 market_index_data["Settlement Period"] = [timedelta(minutes=int(Period * 30)) for Period in market_index_data['Settlement Period']]
 market_index_data['Settlement Date'] = pd.to_datetime(market_index_data['Settlement Date'], format='%d-%b-%Y')
@@ -27,8 +27,8 @@ market_index_data = market_index_data.set_index('Settlement Date')
 Price = market_index_data['Market Index Price(£/MWh)']
 
 
-ng = 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\\NationalGrid_2016.NGM'
-device = 'C:\\Users\Cai Williams\PycharmProjects\Ryfeddod\Data\Devices\\Newcastle48U.csv'
+ng = os.path.join(os.path.dirname(os.getcwd()),'Data','NationalGrid_2016.NGM')
+device = os.path.join(os.path.dirname(os.getcwd()),'Data','Devices','Newcastle12U.csv')
 lat = 53.13359
 lon = -1.746826
 
@@ -80,8 +80,8 @@ for asset in dng.Distributed.Mix['Technologies']:
 Gen,Price = match_dates(Gen, Price)
 solarNT_rev = Gen * Price
 
-plt.plot(np.cumsum(solar_rev))
-plt.plot(np.cumsum(solarNT_rev))
+#plt.plot(np.cumsum(solar_rev))
+#plt.plot(np.cumsum(solarNT_rev))
 
-
+print(np.sum(solar_rev))
 plt.show()
